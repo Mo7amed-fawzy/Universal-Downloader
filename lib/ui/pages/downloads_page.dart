@@ -12,42 +12,47 @@ class DownloadsPage extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final controller = context.watch<AppController>();
-    final tasks = controller.manager.tasks;
+    return ListenableBuilder(
+      listenable: controller.manager,
+      builder: (context, _) {
+        final tasks = controller.manager.tasks;
 
-    return AppScaffold(
-      selectedIndex: 1,
-      body: tasks.isEmpty
-          ? const _EmptyState()
-          : ListView(
-              padding: const EdgeInsets.all(24),
-              children: [
-                Row(
+        return AppScaffold(
+          selectedIndex: 1,
+          body: tasks.isEmpty
+              ? const _EmptyState()
+              : ListView(
+                  padding: const EdgeInsets.all(24),
                   children: [
-                    Expanded(
-                      child: Text(
-                        'Downloads',
-                        style: Theme.of(context).textTheme.headlineSmall,
-                      ),
+                    Row(
+                      children: [
+                        Expanded(
+                          child: Text(
+                            'Downloads',
+                            style: Theme.of(context).textTheme.headlineSmall,
+                          ),
+                        ),
+                        Text(
+                          '${controller.manager.activeCount} active',
+                          style: Theme.of(context).textTheme.bodyMedium,
+                        ),
+                        if (tasks.any((t) => t.state.isTerminal))
+                          TextButton.icon(
+                            onPressed: () => _clearTerminal(controller),
+                            icon: const Icon(Icons.cleaning_services_outlined),
+                            label: const Text('Clear finished'),
+                          ),
+                      ],
                     ),
-                    Text(
-                      '${controller.manager.activeCount} active',
-                      style: Theme.of(context).textTheme.bodyMedium,
-                    ),
-                    if (tasks.any((t) => t.state.isTerminal))
-                      TextButton.icon(
-                        onPressed: () => _clearTerminal(controller),
-                        icon: const Icon(Icons.cleaning_services_outlined),
-                        label: const Text('Clear finished'),
-                      ),
+                    const SizedBox(height: 8),
+                    for (final task in tasks) ...[
+                      DownloadTile(task: task),
+                      const SizedBox(height: 8),
+                    ],
                   ],
                 ),
-                const SizedBox(height: 8),
-                for (final task in tasks) ...[
-                  DownloadTile(task: task),
-                  const SizedBox(height: 8),
-                ],
-              ],
-            ),
+        );
+      },
     );
   }
 
@@ -72,13 +77,13 @@ class _EmptyState extends StatelessWidget {
       child: Column(
         mainAxisSize: MainAxisSize.min,
         children: [
-          Icon(Icons.download_for_offline_outlined,
-              size: 64, color: theme.colorScheme.outline),
-          const SizedBox(height: 12),
-          Text(
-            'No downloads yet',
-            style: theme.textTheme.titleLarge,
+          Icon(
+            Icons.download_for_offline_outlined,
+            size: 64,
+            color: theme.colorScheme.outline,
           ),
+          const SizedBox(height: 12),
+          Text('No downloads yet', style: theme.textTheme.titleLarge),
           const SizedBox(height: 4),
           Text(
             'Paste a URL on the Home page to get started.',
