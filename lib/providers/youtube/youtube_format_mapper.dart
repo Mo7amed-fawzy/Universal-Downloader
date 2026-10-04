@@ -1,5 +1,6 @@
 import '../../core/models/audio_format.dart';
 import '../../core/models/media_info.dart';
+import '../../core/models/subtitle_track.dart';
 import '../../core/models/video_format.dart';
 import 'youtube_extractor.dart' show M3u8Progressive;
 
@@ -67,7 +68,54 @@ class YoutubeFormatMapper {
       description: json['description'] as String?,
       videoFormats: videoFormats,
       audioFormats: uniqueAudio,
+      subtitleTracks: [
+        ..._subtitleTracks(json['subtitles'], isAutomatic: false),
+        ..._subtitleTracks(json['automatic_captions'], isAutomatic: true),
+      ],
     );
+  }
+
+  List<SubtitleTrack> _subtitleTracks(
+    Object? raw, {
+    required bool isAutomatic,
+  }) {
+    if (raw is! Map<String, dynamic>) return const [];
+    final tracks = <SubtitleTrack>[];
+    for (final entry in raw.entries) {
+      if (!RegExp(r'^[a-zA-Z0-9]+(?:[-_][a-zA-Z0-9]+)*$')
+              .hasMatch(entry.key) ||
+          entry.key == 'live_chat') {
+        continue;
+      }
+      final formats = entry.value;
+      if (formats is! List) continue;
+      for (final extension in const ['vtt', 'srt']) {
+        final matches = formats.whereType<Map<String, dynamic>>().where((f) {
+          final url = f['url'];
+          final uri = url is String ? Uri.tryParse(url) : null;
+          return f['ext'] == extension &&
+              uri != null &&
+              uri.host.isNotEmpty &&
+              (uri.scheme == 'https' || uri.scheme == 'http');
+        });
+        if (matches.isEmpty) continue;
+        final name = matches.first['name'];
+        tracks.add(SubtitleTrack(
+          language: entry.key,
+          extension: extension,
+          name: name is String && name.trim().isNotEmpty ? name : null,
+          isAutomatic: isAutomatic,
+          isTranslated: isAutomatic && matches.any((format) {
+            final url = format['url'];
+            return url is String &&
+                (Uri.tryParse(url)?.queryParameters['tlang']?.isNotEmpty ?? false);
+          }),
+        ));
+        break;
+      }
+    }
+    tracks.sort((a, b) => a.label.compareTo(b.label));
+    return tracks;
   }
 
   VideoFormat _toVideoFormat(
@@ -186,6 +234,7 @@ class YoutubeFormatMapper {
       description: info.description,
       videoFormats: info.videoFormats,
       audioFormats: [...info.audioFormats, ...extraAudio],
+      subtitleTracks: info.subtitleTracks,
     );
   }
 }

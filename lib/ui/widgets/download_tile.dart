@@ -67,6 +67,12 @@ class DownloadTile extends StatelessWidget {
                           icon: Icons.music_note_outlined,
                           color: theme.colorScheme.tertiary,
                         ),
+                      if (task.options.subtitle != null)
+                        StatusChip(
+                          label: task.options.subtitle!.label,
+                          icon: Icons.subtitles_outlined,
+                          color: theme.colorScheme.secondary,
+                        ),
                     ],
                   ),
                   const SizedBox(height: 12),
@@ -96,9 +102,11 @@ class _StateArea extends StatelessWidget {
       case DownloadTaskState.queued:
       case DownloadTaskState.fetchingInfo:
       case DownloadTaskState.selectingFormat:
+      case DownloadTaskState.waitingForSubtitles:
         return _infoRow(context, '${state.label}...');
       case DownloadTaskState.downloadingVideo:
       case DownloadTaskState.downloadingAudio:
+      case DownloadTaskState.downloadingSubtitles:
       case DownloadTaskState.merging:
       case DownloadTaskState.verifying:
         return _activeRow(context);

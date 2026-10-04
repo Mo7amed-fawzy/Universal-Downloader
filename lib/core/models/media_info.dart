@@ -1,4 +1,5 @@
 import 'audio_format.dart';
+import 'subtitle_track.dart';
 import 'video_format.dart';
 
 /// Metadata about a piece of media (video, audio, or a combined stream)
@@ -16,6 +17,7 @@ class MediaInfo {
     this.description,
     this.videoFormats = const [],
     this.audioFormats = const [],
+    this.subtitleTracks = const [],
   });
 
   /// Provider-unique identifier (e.g. a YouTube video id).
@@ -42,6 +44,8 @@ class MediaInfo {
   final List<VideoFormat> videoFormats;
 
   final List<AudioFormat> audioFormats;
+
+  final List<SubtitleTrack> subtitleTracks;
 
   /// All languages that have an audio-only track, ordered by preference.
   /// Distinct base codes only (e.g. `ar` and `ar-EG` collapse to `ar`).

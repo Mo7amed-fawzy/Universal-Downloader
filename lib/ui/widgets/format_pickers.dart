@@ -6,6 +6,8 @@ import '../../core/models/media_info.dart';
 import '../../core/utils/language_names.dart';
 import '../../providers/format_selector.dart';
 import '../components/status_chip.dart';
+import '../pages/home_input.dart';
+import 'subtitle_picker.dart';
 
 /// Provider-agnostic format selection controls: video quality, audio language
 /// + bitrate, and container preference.
@@ -13,33 +15,16 @@ class FormatSelectionCard extends StatelessWidget {
   const FormatSelectionCard({
     super.key,
     required this.info,
-    required this.videoQuality,
-    required this.onVideoQualityChanged,
-    required this.audioLanguage,
-    required this.onAudioLanguageChanged,
-    required this.autoBestAudio,
-    required this.onAutoBestAudioChanged,
-    required this.audioBitrate,
-    required this.onAudioBitrateChanged,
+    required this.input,
+    required this.onChanged,
     required this.preferredLanguage,
-    required this.containerPreference,
-    required this.onContainerPreferenceChanged,
   });
 
   final MediaInfo info;
-  final VideoQuality videoQuality;
-  final ValueChanged<VideoQuality> onVideoQualityChanged;
-
-  final String? audioLanguage;
-  final ValueChanged<String?> onAudioLanguageChanged;
-  final bool autoBestAudio;
-  final ValueChanged<bool> onAutoBestAudioChanged;
-  final int? audioBitrate;
-  final ValueChanged<int?> onAudioBitrateChanged;
+  final HomeInput input;
+  final VoidCallback onChanged;
 
   final String preferredLanguage;
-  final ContainerPreference containerPreference;
-  final ValueChanged<ContainerPreference> onContainerPreferenceChanged;
 
   @override
   Widget build(BuildContext context) {
@@ -56,7 +41,7 @@ class FormatSelectionCard extends StatelessWidget {
             Text('Video Quality', style: theme.textTheme.titleMedium),
             const SizedBox(height: 8),
             DropdownButtonFormField<VideoQuality>(
-              initialValue: videoQuality,
+              initialValue: input.videoQuality,
               items: VideoQuality.values
                   .map(
                     (q) => DropdownMenuItem(
@@ -70,7 +55,9 @@ class FormatSelectionCard extends StatelessWidget {
                   )
                   .toList(),
               onChanged: (v) {
-                if (v != null) onVideoQualityChanged(v);
+                if (v == null) return;
+                input.selectVideoQuality(v);
+                onChanged();
               },
             ),
             const Divider(height: 32),
@@ -81,7 +68,7 @@ class FormatSelectionCard extends StatelessWidget {
                   StatusChip(
                     label: preferredHasAudio
                         ? '${LanguageNames.nameFor(preferredLanguage)} audio detected'
-                        : 'Using ${LanguageNames.nameFor(audioLanguage ?? preferredLanguage)} instead',
+                        : 'Using ${LanguageNames.nameFor(input.audioLanguage ?? preferredLanguage)} instead',
                     icon: preferredHasAudio
                         ? Icons.check_circle_outline
                         : Icons.info_outline,
@@ -100,7 +87,7 @@ class FormatSelectionCard extends StatelessWidget {
               )
             else ...[
               DropdownButtonFormField<String?>(
-                initialValue: audioLanguage,
+                initialValue: input.audioLanguage,
                 decoration: const InputDecoration(labelText: 'Language'),
                 items: [
                   for (final lang in languages)
@@ -109,38 +96,53 @@ class FormatSelectionCard extends StatelessWidget {
                       child: Text(_languageLabel(lang, theme)),
                     ),
                 ],
-                onChanged: (v) => onAudioLanguageChanged(v),
+                onChanged: (v) {
+                  input.selectAudioLanguage(v);
+                  onChanged();
+                },
               ),
               const SizedBox(height: 12),
               Row(
                 children: [
                   Expanded(
                     child: Text(
-                      'Auto = Best ${LanguageNames.nameFor(audioLanguage ?? preferredLanguage)}',
+                      'Auto = Best ${LanguageNames.nameFor(input.audioLanguage ?? preferredLanguage)}',
                       style: theme.textTheme.bodyMedium,
                     ),
                   ),
                   Switch(
-                    value: autoBestAudio,
-                    onChanged: onAutoBestAudioChanged,
+                    value: input.autoBestAudio,
+                    onChanged: (v) {
+                      input.selectAutoBestAudio(v);
+                      onChanged();
+                    },
                   ),
                 ],
               ),
-              if (!autoBestAudio) ...[
+              if (!input.autoBestAudio) ...[
                 const SizedBox(height: 8),
                 _AudioBitrateDropdown(
                   info: info,
-                  language: audioLanguage,
-                  selected: audioBitrate,
-                  onChanged: onAudioBitrateChanged,
+                  language: input.audioLanguage,
+                  selected: input.audioBitrate,
+                  onChanged: (v) {
+                    input.selectAudioBitrate(v);
+                    onChanged();
+                  },
                 ),
               ],
             ],
             const Divider(height: 32),
+            SubtitlePicker(
+              tracks: info.subtitleTracks,
+              input: input,
+              onChanged: onChanged,
+            ),
+            const Divider(height: 32),
             Text('Container', style: theme.textTheme.titleMedium),
             const SizedBox(height: 8),
             DropdownButtonFormField<ContainerPreference>(
-              initialValue: containerPreference,
+              initialValue: input.containerPreference,
               items: ContainerPreference.values
                   .map(
                     (c) => DropdownMenuItem(
@@ -150,7 +152,9 @@ class FormatSelectionCard extends StatelessWidget {
                   )
                   .toList(),
               onChanged: (v) {
-                if (v != null) onContainerPreferenceChanged(v);
+                if (v == null) return;
+                input.selectContainer(v);
+                onChanged();
               },
             ),
           ],

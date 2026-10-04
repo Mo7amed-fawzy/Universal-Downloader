@@ -21,6 +21,7 @@ import '../widgets/media_info_card.dart';
 import '../widgets/output_folder_row.dart';
 import '../widgets/url_input_card.dart';
 import '../widgets/app_scaffold.dart';
+import 'home_input.dart';
 
 /// Main screen: URL → detect provider → fetch info → choose formats → download.
 class HomePage extends StatefulWidget {
@@ -39,12 +40,7 @@ class _HomePageState extends State<HomePage> {
   String? _errorMessage;
   MediaInfo? _info;
 
-  VideoQuality _videoQuality = VideoQuality.best;
-  String? _audioLanguage;
-  bool _autoBestAudio = true;
-  int? _audioBitrate;
-  ContainerPreference _containerPreference = ContainerPreference.auto;
-  String _outputDirectory = '';
+  final _input = HomeInput();
 
   static const _selector = FormatSelector();
   final _repository = DownloadRepository();
@@ -53,11 +49,13 @@ class _HomePageState extends State<HomePage> {
   void initState() {
     super.initState();
     _urlController.addListener(_onUrlChanged);
-    _outputDirectory = context.read<AppController>().resolveOutputDirectory();
+    _input.selectOutputDirectory(
+      context.read<AppController>().resolveOutputDirectory(),
+    );
     final settings = context.read<AppController>().settings;
-    _autoBestAudio = settings.autoSelectBestAudio;
-    _videoQuality = settings.defaultVideoQuality;
-    _containerPreference = settings.containerPreference;
+    _input.selectAutoBestAudio(settings.autoSelectBestAudio);
+    _input.selectVideoQuality(settings.defaultVideoQuality);
+    _input.selectContainer(settings.containerPreference);
   }
 
   @override
@@ -116,6 +114,7 @@ class _HomePageState extends State<HomePage> {
       _errorMessage = null;
       _fetching = true;
       _info = null;
+      _input.selectSubtitle(null);
     });
 
     try {
@@ -128,11 +127,10 @@ class _HomePageState extends State<HomePage> {
 
       setState(() {
         _info = info;
-        _audioLanguage = preferred;
-        _audioBitrate = null;
-        _autoBestAudio = settings.autoSelectBestAudio;
-        _videoQuality = settings.defaultVideoQuality;
-        _containerPreference = settings.containerPreference;
+        _input.selectAudioLanguage(preferred);
+        _input.selectAutoBestAudio(settings.autoSelectBestAudio);
+        _input.selectVideoQuality(settings.defaultVideoQuality);
+        _input.selectContainer(settings.containerPreference);
       });
 
       if (settings.autoStartDownload) {
@@ -169,7 +167,10 @@ class _HomePageState extends State<HomePage> {
     final info = _info;
     if (info == null) return;
 
-    final video = _selector.selectBestVideo(info.videoFormats, quality: _videoQuality);
+    final video = _selector.selectBestVideo(
+      info.videoFormats,
+      quality: _input.videoQuality,
+    );
     if (video == null) {
       await showErrorDialog(
         context,
@@ -184,15 +185,15 @@ class _HomePageState extends State<HomePage> {
     String? audioLanguageCode;
 
     if (hasSeparateAudio) {
-      final language = _audioLanguage ?? info.audioLanguages.first;
-      if (_autoBestAudio) {
+      final language = _input.audioLanguage ?? info.audioLanguages.first;
+      if (_input.autoBestAudio) {
         audio = _selector.selectBestAudio(
           info.audioFormats,
           preferredLanguage: language,
           fallbackLanguage: _fallbackOrNull(controller.settings.fallbackLanguage),
         );
       } else {
-        audio = _pickBitrate(info, language, _audioBitrate);
+        audio = _pickBitrate(info, language, _input.audioBitrate);
       }
 
       if (audio == null) {
@@ -218,7 +219,7 @@ class _HomePageState extends State<HomePage> {
       audioLabel = 'Embedded audio';
     }
 
-    var directory = _outputDirectory.trim();
+    var directory = _input.outputDirectory.trim();
     if (directory.isEmpty) {
       directory = controller.resolveOutputDirectory();
     }
@@ -238,8 +239,9 @@ class _HomePageState extends State<HomePage> {
       videoFormatId: video.formatId,
       audioFormatId: audio?.formatId,
       audioLanguage: audioLanguageCode,
+      subtitle: _input.subtitle,
       overwrite: false,
-      containerPreference: _containerPreference,
+      containerPreference: _input.containerPreference,
     );
 
     controller.log.info('Starting download with '
@@ -355,31 +357,16 @@ class _HomePageState extends State<HomePage> {
                           const SizedBox(height: 12),
                           FormatSelectionCard(
                             info: _info!,
-                            videoQuality: _videoQuality,
-                            onVideoQualityChanged: (v) =>
-                                setState(() => _videoQuality = v),
-                            audioLanguage: _audioLanguage,
-                            onAudioLanguageChanged: (v) => setState(() {
-                              _audioLanguage = v;
-                              _audioBitrate = null;
-                            }),
-                            autoBestAudio: _autoBestAudio,
-                            onAutoBestAudioChanged: (v) =>
-                                setState(() => _autoBestAudio = v),
-                            audioBitrate: _audioBitrate,
-                            onAudioBitrateChanged: (v) =>
-                                setState(() => _audioBitrate = v),
+                            input: _input,
+                            onChanged: () => setState(() {}),
                             preferredLanguage:
                                 controller.settings.preferredLanguage,
-                            containerPreference: _containerPreference,
-                            onContainerPreferenceChanged: (v) =>
-                                setState(() => _containerPreference = v),
                           ),
                           const SizedBox(height: 12),
                           OutputFolderRow(
-                            directory: _outputDirectory,
+                            directory: _input.outputDirectory,
                             onChanged: (d) =>
-                                setState(() => _outputDirectory = d),
+                                setState(() => _input.selectOutputDirectory(d)),
                           ),
                           const SizedBox(height: 16),
                           Align(

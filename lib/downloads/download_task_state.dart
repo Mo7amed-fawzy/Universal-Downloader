@@ -5,6 +5,8 @@ enum DownloadTaskState {
   selectingFormat,
   downloadingVideo,
   downloadingAudio,
+  downloadingSubtitles,
+  waitingForSubtitles,
   merging,
   verifying,
   completed,
@@ -17,6 +19,8 @@ enum DownloadTaskState {
         this == selectingFormat ||
         this == downloadingVideo ||
         this == downloadingAudio ||
+        this == downloadingSubtitles ||
+        this == waitingForSubtitles ||
         this == merging ||
         this == verifying;
   }
@@ -36,6 +40,10 @@ enum DownloadTaskState {
         return 'Downloading video';
       case DownloadTaskState.downloadingAudio:
         return 'Downloading audio';
+      case DownloadTaskState.downloadingSubtitles:
+        return 'Downloading subtitles';
+      case DownloadTaskState.waitingForSubtitles:
+        return 'Preparing translated subtitles (about 1 minute)';
       case DownloadTaskState.merging:
         return 'Merging';
       case DownloadTaskState.verifying:

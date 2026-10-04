@@ -1,3 +1,5 @@
+import 'subtitle_track.dart';
+
 /// Options that drive a single download operation.
 ///
 /// The concrete video/audio formats are selected by the `FormatSelector`
@@ -10,6 +12,7 @@ class DownloadOptions {
     required this.videoFormatId,
     this.audioFormatId,
     this.audioLanguage,
+    this.subtitle,
     this.overwrite = false,
     this.containerPreference = ContainerPreference.auto,
   });
@@ -32,6 +35,8 @@ class DownloadOptions {
   /// Language code the selected audio track should carry (used for
   /// verification, e.g. `ar`). Null disables language verification.
   final String? audioLanguage;
+
+  final SubtitleTrack? subtitle;
 
   final bool overwrite;
 

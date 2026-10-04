@@ -14,6 +14,7 @@ import '../../downloads/download_task_state.dart';
 import '../downloader_provider.dart';
 import 'youtube_extractor.dart';
 import 'youtube_format_mapper.dart';
+import 'youtube_subtitle_downloader.dart';
 
 /// YouTube provider backed by yt-dlp.
 class YoutubeProvider implements DownloaderProvider {
@@ -134,6 +135,30 @@ class YoutubeProvider implements DownloaderProvider {
 
     File? audioTmp;
     try {
+      File? subtitleTmp;
+      final subtitle = options.subtitle;
+      if (subtitle != null) {
+        if (!media.subtitleTracks.any((track) =>
+            track.id == subtitle.id && track.extension == subtitle.extension)) {
+          throw DownloadFailedException(
+            'The selected subtitles are unavailable. Fetch info again.',
+          );
+        }
+        onPhase(subtitle.isTranslated
+            ? DownloadTaskState.waitingForSubtitles
+            : DownloadTaskState.downloadingSubtitles);
+        subtitleTmp = await YoutubeSubtitleDownloader(
+          ytDlpPath: ytDlpPath,
+          runner: _runner,
+          extraArgs: _extraArgList,
+        ).download(
+          url: media.pageUrl,
+          track: subtitle,
+          directory: tempDir,
+          cancelToken: cancelToken,
+          onDownloadStarted: () => onPhase(DownloadTaskState.downloadingSubtitles),
+        );
+      }
       if (progressiveId != null) {
         // m3u8 progressive: download the muxed stream directly as video.
         // Use tv_embedded — the same client that discovered these streams.
@@ -289,6 +314,23 @@ class YoutubeProvider implements DownloaderProvider {
         );
       }
 
+      cancelToken.throwIfCancelled();
+      if (subtitleTmp != null && subtitle != null) {
+        final basePath = outputFile.path.substring(
+          0,
+          outputFile.path.lastIndexOf('.'),
+        );
+        final subtitleOutput = File(
+          '$basePath.${subtitle.language}.${subtitle.extension}',
+        );
+        if (subtitleOutput.existsSync() && !options.overwrite) {
+          throw FilesystemException(
+            'The subtitle file already exists: ${subtitleOutput.path}',
+          );
+        }
+        await subtitleTmp.copy(subtitleOutput.path);
+      }
+
       // 6. Cleanup temp files only after successful verification.
       _log.info('Download completed: ${outputFile.path}');
       _repository.cleanupTaskDirectory(taskId);
@@ -319,6 +361,9 @@ class YoutubeProvider implements DownloaderProvider {
     final args = [
       ...baseArgs,
       ..._extraArgList,
+      '--no-write-subs',
+      '--no-write-auto-subs',
+      '--no-embed-subs',
       '--newline',
       '-f',
       formatId,
