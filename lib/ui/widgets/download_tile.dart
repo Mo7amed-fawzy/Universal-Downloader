@@ -106,6 +106,7 @@ class _StateArea extends StatelessWidget {
         return _infoRow(context, '${state.label}...');
       case DownloadTaskState.downloadingVideo:
       case DownloadTaskState.downloadingAudio:
+      case DownloadTaskState.downloadingCover:
       case DownloadTaskState.downloadingSubtitles:
       case DownloadTaskState.merging:
       case DownloadTaskState.verifying:

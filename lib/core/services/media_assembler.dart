@@ -80,28 +80,41 @@ class MediaAssembler {
   /// Never re-encodes when both streams are copy-compatible.
   Future<File> merge(
     File video,
-    File audio,
+    File? audio,
     String outputPath, {
+    File? cover,
     CancelToken? cancelToken,
   }) async {
+    final isMp4 = outputPath.endsWith('.mp4');
+    if (cover != null && !isMp4 && !outputPath.endsWith('.mkv')) {
+      throw MergeException('Embedded covers require MP4 or MKV output.');
+    }
+    final coverInput = audio == null ? 1 : 2;
     final args = [
       '-y',
       '-hide_banner',
       '-i',
       video.path,
-      '-i',
-      audio.path,
+      if (audio != null) ...['-i', audio.path],
+      if (cover != null && isMp4) ...['-i', cover.path],
       '-map',
-      '0:v:0',
+      '0:V:0',
       '-map',
-      '1:a:0',
-      '-c:v',
+      audio == null ? '0:a:0' : '1:a:0',
+      if (cover != null && isMp4) ...['-map', '$coverInput:v:0'],
+      '-c',
       'copy',
-      '-c:a',
-      'copy',
-      '-shortest',
-      if (outputPath.endsWith('.mp4')) '-movflags',
-      if (outputPath.endsWith('.mp4')) '+faststart',
+      if (audio != null && cover == null) '-shortest',
+      if (cover != null && isMp4) ...['-disposition:v:1', 'attached_pic'],
+      if (cover != null && !isMp4) ...[
+        '-attach',
+        cover.path,
+        '-metadata:s:t:0',
+        'mimetype=image/jpeg',
+        '-metadata:s:t:0',
+        'filename=cover.jpg',
+      ],
+      if (isMp4) ...['-movflags', '+faststart'],
       outputPath,
     ];
 
@@ -136,6 +149,7 @@ class MediaAssembler {
     File file, {
     String? expectedAudioLanguage,
     int? expectedHeight,
+    bool expectCover = false,
   }) async {
     if (!file.existsSync() || file.lengthSync() == 0) {
       return const VerificationReport(
@@ -167,6 +181,7 @@ class MediaAssembler {
     final failures = <String>[];
     var hasVideo = false;
     var hasAudio = false;
+    var hasCover = false;
     String? audioLanguage;
     int? width;
     int? height;
@@ -179,6 +194,12 @@ class MediaAssembler {
       for (final s in streams) {
         if (s is! Map<String, dynamic>) continue;
         final codecType = s['codec_type'] as String?;
+        final disposition = s['disposition'];
+        if (disposition is Map<String, dynamic> &&
+            _parseInt(disposition['attached_pic']) == 1) {
+          hasCover = true;
+          continue;
+        }
         if (codecType == 'video') {
           hasVideo = true;
           width = _parseInt(s['width']);
@@ -194,6 +215,7 @@ class MediaAssembler {
 
       if (!hasVideo) failures.add('No video stream found.');
       if (!hasAudio) failures.add('No audio stream found.');
+      if (expectCover && !hasCover) failures.add('No embedded cover found.');
       if (size <= 0) failures.add('Output file has zero size.');
 
       if (expectedAudioLanguage != null &&

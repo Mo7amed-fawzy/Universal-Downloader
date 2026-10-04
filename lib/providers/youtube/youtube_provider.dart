@@ -12,6 +12,7 @@ import '../../core/services/media_assembler.dart';
 import '../../downloads/download_repository.dart';
 import '../../downloads/download_task_state.dart';
 import '../downloader_provider.dart';
+import 'youtube_cover_downloader.dart';
 import 'youtube_extractor.dart';
 import 'youtube_format_mapper.dart';
 import 'youtube_subtitle_downloader.dart';
@@ -135,6 +136,20 @@ class YoutubeProvider implements DownloaderProvider {
 
     File? audioTmp;
     try {
+      File? coverTmp;
+      final thumbnail = media.thumbnail;
+      if (thumbnail != null) {
+        onPhase(DownloadTaskState.downloadingCover);
+        coverTmp =
+            await YoutubeCoverDownloader(
+              ffmpegPath: ffmpegPath,
+              runner: _runner,
+            ).download(
+              url: thumbnail,
+              directory: tempDir,
+              cancelToken: cancelToken,
+            );
+      }
       File? subtitleTmp;
       final subtitle = options.subtitle;
       if (subtitle != null) {
@@ -276,27 +291,46 @@ class YoutubeProvider implements DownloaderProvider {
           videoTmp,
           audioTmp,
           outputPath,
+          cover: coverTmp,
           cancelToken: cancelToken,
         );
       } else {
         // Combined stream: move the downloaded file into place.
         cancelToken.throwIfCancelled();
-        final extension = (videoFormat?.container?.isNotEmpty ?? false)
+        var extension = (videoFormat?.container?.isNotEmpty ?? false)
             ? videoFormat!.container!
             : 'mp4';
+        if (coverTmp != null) {
+          extension =
+              options.containerPreference == ContainerPreference.mkv ||
+                  !{'mp4', 'mkv'}.contains(extension)
+              ? 'mkv'
+              : extension;
+        }
         final outputPath = _repository.buildUniqueOutputPath(
           outputDirectory: options.outputDirectory,
           baseName: options.title,
           extension: extension,
           overwrite: options.overwrite,
         );
-        _log.info('Moving combined stream to $outputPath');
-        if (videoTmp.path != outputPath) {
-          final existing = File(outputPath);
-          if (existing.existsSync()) existing.deleteSync();
-          videoTmp.renameSync(outputPath);
+        if (coverTmp != null) {
+          onPhase(DownloadTaskState.merging);
+          outputFile = await _assembler.merge(
+            videoTmp,
+            null,
+            outputPath,
+            cover: coverTmp,
+            cancelToken: cancelToken,
+          );
+        } else {
+          _log.info('Moving combined stream to $outputPath');
+          if (videoTmp.path != outputPath) {
+            final existing = File(outputPath);
+            if (existing.existsSync()) existing.deleteSync();
+            videoTmp.renameSync(outputPath);
+          }
+          outputFile = File(outputPath);
         }
-        outputFile = File(outputPath);
       }
 
       // 5. Verify the final file.
@@ -306,6 +340,7 @@ class YoutubeProvider implements DownloaderProvider {
         outputFile,
         expectedAudioLanguage: options.audioLanguage,
         expectedHeight: videoFormat?.height,
+        expectCover: coverTmp != null,
       );
       if (!report.passed) {
         throw VerificationException(

@@ -165,6 +165,8 @@ void main() {
       SubtitleTrack? subtitle,
       bool separateAudio = false,
       bool hls = false,
+      bool cover = false,
+      String container = 'mp4',
       CancelToken? token,
     }) async {
       final result = await provider.download(
@@ -174,10 +176,11 @@ void main() {
           providerId: 'youtube',
           providerName: 'YouTube',
           pageUrl: url,
+          thumbnail: cover ? Uri.parse('https://example.com/cover.webp') : null,
           videoFormats: [
             VideoFormat(
               formatId: 'video',
-              container: 'mp4',
+              container: container,
               codec: 'avc1',
               height: 720,
               videoOnly: separateAudio,
@@ -233,6 +236,27 @@ void main() {
       );
       expect(phases, isNot(contains(DownloadTaskState.downloadingSubtitles)));
     });
+
+    for (final mode in ['dash', 'combined', 'hls', 'webm']) {
+      test('$mode embeds the cover and preserves selected subtitles', () async {
+        final output = await download(
+          cover: true,
+          subtitle: automatic,
+          separateAudio: mode == 'dash',
+          hls: mode == 'hls',
+          container: mode == 'webm' ? 'webm' : 'mp4',
+        );
+        expect(phases.first, DownloadTaskState.downloadingCover);
+        expect(DownloadTaskState.downloadingCover.isActive, isTrue);
+        expect(phases, contains(DownloadTaskState.merging));
+        final mux = runner.calls.singleWhere(
+          (args) => args.contains('attached_pic') || args.contains('-attach'),
+        );
+        expect(mux, contains('copy'));
+        expect(output.path, endsWith(mode == 'webm' ? '.mkv' : '.mp4'));
+        expect(File('${root.path}/Video.ar.vtt').existsSync(), isTrue);
+      });
+    }
 
     test(
       'translated captions wait in yt-dlp and then report downloading',
@@ -437,10 +461,14 @@ class SubtitleProcessRunner extends ProcessRunner {
         onLine?.call('[download] 100%', true);
       }
     } else if (executable == 'ffprobe') {
+      final hasCover = calls.any(
+        (args) => args.contains('attached_pic') || args.contains('-attach'),
+      );
       return ProcessRunnerResult(
         exitCode: verificationFails ? 1 : 0,
         stdout:
-            '{"streams":[{"codec_type":"video","height":720},{"codec_type":"audio","tags":{"language":"ar"}}],"format":{"size":100}}',
+            '{"streams":[{"codec_type":"video","height":720},{"codec_type":"audio","tags":{"language":"ar"}}'
+            '${hasCover ? ',{"codec_type":"video","height":1080,"disposition":{"attached_pic":1}}' : ''}],"format":{"size":100}}',
         stderr: '',
       );
     } else {
