@@ -86,7 +86,6 @@ class DownloadManager extends ChangeNotifier {
     log.info('Retrying task $taskId');
     task.resetForRetry();
     _pump();
-    await _execute(task, provider);
   }
 
   /// Removes a task from the queue.
@@ -99,7 +98,7 @@ class DownloadManager extends ChangeNotifier {
   /// Starts queued tasks while execution slots are free.
   void _pump() {
     notifyListeners();
-    final pending = queue.pending;
+    final pending = queue.pending.where((task) => !_runningIds.contains(task.id));
     if (pending.isEmpty) return;
 
     final slots = queue.maxConcurrent - _runningIds.length;
