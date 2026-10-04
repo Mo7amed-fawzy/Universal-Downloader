@@ -239,7 +239,7 @@ class _HomePageState extends State<HomePage> {
       videoFormatId: video.formatId,
       audioFormatId: audio?.formatId,
       audioLanguage: audioLanguageCode,
-      subtitle: _input.subtitle,
+      subtitle: _input.subtitleToDownload,
       overwrite: false,
       containerPreference: _input.containerPreference,
     );

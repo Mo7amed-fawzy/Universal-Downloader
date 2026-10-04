@@ -10,6 +10,10 @@ class HomeInput {
   ContainerPreference containerPreference = ContainerPreference.auto;
   String outputDirectory = '';
   SubtitleTrack? subtitle;
+  bool downloadSubtitleFile = false;
+
+  SubtitleTrack? get subtitleToDownload =>
+      downloadSubtitleFile ? subtitle : null;
 
   void selectVideoQuality(VideoQuality value) => videoQuality = value;
 
@@ -27,5 +31,11 @@ class HomeInput {
 
   void selectOutputDirectory(String value) => outputDirectory = value;
 
-  void selectSubtitle(SubtitleTrack? value) => subtitle = value;
+  void selectSubtitle(SubtitleTrack? value) {
+    subtitle = value;
+    if (value == null) downloadSubtitleFile = false;
+  }
+
+  void selectDownloadSubtitleFile(bool value) =>
+      downloadSubtitleFile = value && subtitle != null;
 }

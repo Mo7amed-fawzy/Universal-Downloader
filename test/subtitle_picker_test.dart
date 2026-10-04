@@ -28,21 +28,66 @@ void main() {
       ),
     );
     expect(input.subtitle, isNull);
+    expect(input.downloadSubtitleFile, isFalse);
+    expect(input.subtitleToDownload, isNull);
+    expect(
+      tester.widget<SwitchListTile>(find.byType(SwitchListTile)).onChanged,
+      isNull,
+    );
     expect(find.text('None'), findsOneWidget);
     await tester.tap(find.byType(DropdownButtonFormField<String>));
     await tester.pumpAndSettle();
     await tester.tap(find.text(tracks.last.label).last);
     await tester.pumpAndSettle();
     expect(input.subtitle, same(tracks.last));
+    expect(input.subtitleToDownload, isNull);
+    await tester.tap(find.byType(Switch));
+    await tester.pumpAndSettle();
+    expect(input.subtitleToDownload, same(tracks.last));
     await tester.tap(find.byType(DropdownButtonFormField<String>));
     await tester.pumpAndSettle();
     await tester.tap(find.text('None').last);
     await tester.pumpAndSettle();
     expect(input.subtitle, isNull);
+    expect(input.downloadSubtitleFile, isFalse);
+    expect(input.subtitleToDownload, isNull);
+  });
+
+  testWidgets('toggle controls saving without losing the selected language', (
+    tester,
+  ) async {
+    final input = HomeInput()..selectSubtitle(tracks.first);
+    await tester.pumpWidget(
+      MaterialApp(
+        home: Scaffold(
+          body: StatefulBuilder(
+            builder: (context, setState) => SubtitlePicker(
+              tracks: tracks,
+              input: input,
+              onChanged: () => setState(() {}),
+            ),
+          ),
+        ),
+      ),
+    );
+    expect(find.text('Add separate subtitle file'), findsOneWidget);
+    expect(input.subtitleToDownload, isNull);
+    await tester.tap(find.byType(Switch));
+    await tester.pumpAndSettle();
+    expect(input.downloadSubtitleFile, isTrue);
+    expect(input.subtitleToDownload, same(tracks.first));
+    await tester.tap(find.byType(Switch));
+    await tester.pumpAndSettle();
+    expect(input.downloadSubtitleFile, isFalse);
+    expect(input.subtitleToDownload, isNull);
+    expect(input.subtitle, same(tracks.first));
+    expect(find.text(tracks.first.label), findsOneWidget);
   });
 
   testWidgets('new fetch reset clears the visible selection', (tester) async {
-    final input = HomeInput()..selectSubtitle(tracks.first);
+    final input = HomeInput()
+      ..selectSubtitle(tracks.first)
+      ..selectDownloadSubtitleFile(true);
     final widget = MaterialApp(
       home: Scaffold(
         body: SubtitlePicker(tracks: tracks, input: input, onChanged: () {}),
@@ -60,6 +105,12 @@ void main() {
     );
     expect(find.text('None'), findsOneWidget);
     expect(input.subtitle, isNull);
+    expect(input.downloadSubtitleFile, isFalse);
+    expect(input.subtitleToDownload, isNull);
+    expect(
+      tester.widget<SwitchListTile>(find.byType(SwitchListTile)).value,
+      isFalse,
+    );
   });
 
   testWidgets('no available subtitles leaves a disabled None field', (
@@ -78,6 +129,10 @@ void main() {
     );
     expect(find.text('None'), findsOneWidget);
     expect(find.text('No subtitles available'), findsOneWidget);
+    expect(
+      tester.widget<SwitchListTile>(find.byType(SwitchListTile)).onChanged,
+      isNull,
+    );
     expect(
       tester
           .widget<DropdownButtonFormField<String>>(

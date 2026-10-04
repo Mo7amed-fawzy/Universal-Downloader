@@ -75,7 +75,10 @@ language, or turn it off to choose an audio quality. Choose a **Container**
 the file will be saved. Click **Download** to start.
 
 **Subtitles** defaults to **None** each time you fetch a video. To include
-captions, choose one of the available tracks before downloading. Automatic
+captions, choose one of the available tracks and turn on **Add separate subtitle
+file** before downloading. The toggle defaults to off and resets on each fetch.
+Turning it off keeps the selected language but downloads no subtitle file.
+It is disabled while **None** is selected. Automatic
 captions are labeled **automatic** or **auto-translated**; subtitle language is
 independent of audio language. Videos without supported subtitle tracks keep
 this field disabled.
@@ -90,10 +93,12 @@ If YouTube still returns HTTP 429, wait a few minutes before retrying.
 
 ![Download waiting for translated subtitles](docs/screenshots/preparing-subtitles.png)
 
-Selected captions are saved beside the video as a separate `.vtt` file (`.srt`
+With **Add separate subtitle file** on, selected captions are saved beside the
+video as a separate `.vtt` file (`.srt`
 when VTT is unavailable), using the same filename plus the language code, such
 as `Video.ar.vtt`. They are not burned into or embedded in the video. A selected
-subtitle download failure fails the task; select **None** and start a new task
+subtitle download failure fails the task; turn off **Add separate subtitle file**
+or select **None** and start a new task
 to download without captions. Keep **Automatic downloads** off to choose a
 subtitle track before starting. Caption downloads use
 [yt-dlp's subtitle options](https://github.com/yt-dlp/yt-dlp#subtitle-options).
