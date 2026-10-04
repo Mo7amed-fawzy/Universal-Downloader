@@ -109,7 +109,9 @@ subtitle track before starting. Caption downloads use
 
 The app opens **Downloads**, where each task shows its progress through
 downloading, merging when needed, and verification. When a task shows
-**Completed**, click its folder icon (**Open location**) to find the saved file.
+**Completed**, click its folder icon (**Open location**) to open the containing
+folder with the saved video selected. If the file manager does not support
+selection, the app opens the folder instead.
 Active tasks have a **Cancel** button; failed tasks provide **View details** and
 **Retry**. Use **Clear finished** to remove finished entries from the list.
 

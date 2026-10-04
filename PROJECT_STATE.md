@@ -4,6 +4,26 @@ Last updated: 2026-10-04 (Africa/Cairo).
 
 ## Current Checkpoint
 
+**Open location** now opens the containing folder with the downloaded video
+selected. FileLocationService calls `org.freedesktop.FileManager1.ShowItems`
+through `gdbus` using an encoded absolute file URI and a five-second D-Bus
+timeout. If selection is unavailable, it falls back to opening the folder with
+`xdg-open`. DownloadLocationButton awaits the operation and displays an error
+if opening fails; it is disabled when no output path exists.
+
+Verification on 2026-10-04: static analysis and Linux debug build passed;
+six tests passed across `download_location_button_test.dart` and
+`downloads_page_test.dart`. Checks cover the button's exact file URI (including
+Arabic, spaces, quotes, and punctuation), fallback, errors, and disabled state.
+The live ShowItems command selected Expansible in Nemo, visually confirmed in
+`/tmp/expansible-showitems-selection.png`. The running app's button was not
+retested after rebuilding; restart the downloader to load this change.
+README documents selection and fallback. Implementation, tests, and docs are
+included in one focused commit. No push was requested for this change.
+At task start, `main` matched the local `origin/main` reference.
+
+## Previous Media and Thumbnail Checkpoint
+
 Atomic media publication is committed as `872e1d7`. MediaAssembler merges into
 a unique hidden directory on the destination filesystem, then atomically
 renames the completed file. Failure, cancellation, or empty output removes

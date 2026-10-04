@@ -1,6 +1,3 @@
-import 'dart:async';
-import 'dart:io';
-
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 
@@ -9,6 +6,7 @@ import '../../core/utils/format_utils.dart';
 import '../../downloads/download_task.dart';
 import '../../downloads/download_task_state.dart';
 import '../components/status_chip.dart';
+import 'download_location_button.dart';
 import 'error_dialog.dart';
 
 /// A single entry in the download queue.
@@ -256,11 +254,7 @@ class _Actions extends StatelessWidget {
     final buttons = <Widget>[];
     switch (state) {
       case DownloadTaskState.completed:
-        buttons.add(IconButton(
-          tooltip: 'Open location',
-          icon: const Icon(Icons.folder_open),
-          onPressed: () => _openLocation(context),
-        ));
+        buttons.add(DownloadLocationButton(outputPath: task.outputPath));
         buttons.add(IconButton(
           tooltip: 'Remove',
           icon: const Icon(Icons.delete_outline),
@@ -301,18 +295,6 @@ class _Actions extends StatelessWidget {
     }
 
     return Row(mainAxisSize: MainAxisSize.min, children: buttons);
-  }
-
-  Future<void> _openLocation(BuildContext context) async {
-    final output = task.outputPath;
-    if (output == null) return;
-    final file = File(output);
-    final dir = file.parent.path;
-    try {
-      unawaited(Process.run('xdg-open', [dir], runInShell: false));
-    } catch (_) {
-      // Ignore: file managers may be unavailable.
-    }
   }
 }
 
