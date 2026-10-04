@@ -4,20 +4,52 @@ Last updated: 2026-10-04 (Africa/Cairo).
 
 ## Current Checkpoint
 
-Added a README **How to Use** section covering launch, URL entry, Fetch Info,
-quality/audio/container selection, output folder, task controls, and settings.
-The section embeds five screenshots in `docs/screenshots/`: `home.png`,
-`video-details.jpg`, `download-options.png`, `downloads.png`, and `settings.png`.
-Home was captured from the running Linux app; the user supplied the four
-additional screenshots. Their filenames were corrected and standardized,
-including removal of spaces and a stray backslash. Image contents were retained.
+Implemented optional YouTube subtitle downloads. Fetch Info exposes uploaded
+and automatic caption tracks (VTT preferred, SRT fallback), excluding live chat
+and unsupported/malformed entries. The Subtitles field defaults to **None** and
+resets at each fetch, including automatic-download mode. Audio language and
+subtitle language remain independent. Home download fields now share HomeInput.
 
-Verification for this documentation task: `flutter build linux --debug --no-pub`
-succeeded; the resulting app was opened and its Home screen visually inspected.
-All five images were visually inspected and their relative Markdown links
-checked. The user's Downloads screenshot shows completed and active tasks;
-no additional live download or test-suite run was performed by the agent for
-this documentation update. Application source was not changed.
+The selected track downloads into the task directory before video/audio.
+After media verification it is copied beside the final, uniquely named video,
+e.g. `Video (1).ar.vtt`. Subtitles are separate files, not embedded or burned in.
+Missing/empty/failed caption downloads fail the task rather than silently
+omitting the user's selection. Cancellation uses the existing token; None adds
+no subtitle download process. Media stream commands explicitly disable subtitle
+writing; the caption command clears broader language selections from extra args.
+Both DASH merging and HLS combined-stream downloads preserve this behavior.
+
+README usage instructions describe the field and sidecar files. Two additional
+user-supplied screenshots show subtitle selection and the preparing phase.
+Their filenames are standardized as `subtitles.png` and
+`preparing-subtitles.png`; image contents are unchanged. The selection image
+predates the more specific auto-translated label. The original five screenshots
+remain unchanged.
+
+Follow-up fix on 2026-10-04: reproduced HTTP 429 downloading Arabic automatic
+captions for `https://youtu.be/vNwCw6uVyTg` (Flutter at Google I/O 2026 in 5
+minutes). A live comparison succeeded after yt-dlp's documented
+`--sleep-subtitles 60` wait. Caption URLs containing `tlang` now mark a track as
+auto-translated; only these tracks receive that wait. The queue displays a
+cancellable preparing-subtitles phase, then downloading when transfer starts.
+Persistent HTTP 429 responses now explain the actual rate-limit failure.
+Both default and subtitle output templates point into the task directory,
+keeping yt-dlp's intermediate subtitle files out of the working directory.
+
+Also fixed the reported stale active count: DownloadsPage now listens to
+DownloadManager. Retry goes through the queue exactly once and respects its
+concurrency limit; already-running IDs are excluded from pending scheduling.
+
+Verification: static analysis and Linux debug build passed; 73 unit/widget
+tests, five local media/cancellation checks, and two local real-yt-dlp caption
+tests passed (80 local tests). A separate opt-in live regression test used the
+actual Dart extractor/mapper/downloader on the reported video and successfully
+downloaded VTT with `Language: ar`, timed cues, and Arabic text in 74 seconds.
+The CLI comparison output remains at
+`/tmp/universal-subtitle-repro/subtitles.ar.vtt`. No full 4K video download or
+desktop walkthrough was repeated. Restart the running app to load this build.
+The subtitle feature, retry scheduling fix, Downloads UI refresh, and updated
+documentation/screenshots are grouped into four focused commits for `main`.
 
 ## Repository History
 
@@ -42,7 +74,8 @@ No additional application tests were run for the history-only split.
 
 Ignore rules exclude extractor
 `*.dump` files and local credential files, in addition to existing build/cache
-and editor exclusions. No new feature or bug fix is in progress.
+and editor exclusions. The subsequent README/screenshots commit is `0927844`;
+use Git status for the current local/remote relationship.
 
 ## Previous Live Download Checkpoint
 
@@ -87,6 +120,8 @@ ffmpeg stream copy and checked with ffprobe.
   empty fallback language. See the UI fallback caveat below.
 - Container preference: automatic, MP4, or MKV. Separate streams are copied
   without re-encoding; combined streams are moved into the output location.
+- Optional uploaded/automatic YouTube subtitles default to None and save beside
+  the video as a language-tagged VTT/SRT file when explicitly selected.
 - The in-memory queue defaults to two concurrent downloads. Task controls
   include cancel, retry failed tasks, remove, and open output location.
 - Settings persist through shared_preferences under `settings_v1`; queue
@@ -107,6 +142,7 @@ the newer HLS path. Source code is the authority for current behavior.
 | Provider contract | `lib/providers/downloader_provider.dart` and `provider_registry.dart`. |
 | Selection | `lib/providers/format_selector.dart` ranks real format metadata; common models live in `lib/core/models/`. |
 | YouTube | `lib/providers/youtube/youtube_extractor.dart`, `youtube_format_mapper.dart`, `youtube_provider.dart`. |
+| Subtitles | `core/models/subtitle_track.dart`, `providers/youtube/youtube_subtitle_downloader.dart`, `ui/widgets/subtitle_picker.dart`; all under `lib/`. |
 | Direct URLs | `lib/providers/direct/direct_media_provider.dart` uses HTTP HEAD metadata and GET streaming. |
 | Downloads | `lib/downloads/download_manager.dart`, `download_queue.dart`, `download_task.dart`, `download_repository.dart`. |
 | Processes | `lib/core/process/process_runner.dart` uses argv, stdout/stderr capture, and SIGTERM then SIGKILL cancellation. |
@@ -162,32 +198,46 @@ needed or inspected for this handoff.
 
 Test coverage includes selection, filename/path handling, provider resolution,
 YouTube mapping/HLS parsing, a StatusChip widget, local merging, and cancellation
-tokens. It does not establish full queue behavior or complete UI workflows.
+tokens. Subtitle tests add caption mapping, provider pipeline failure/cancellation,
+sidecar naming, picker interaction/reset, and local real-yt-dlp downloads.
+Queue regression tests now cover retry scheduling and concurrency; a Downloads
+widget test checks failure counts and clearing terminal tasks. This still does
+not establish complete UI workflows.
+
+Run the current feature checks with:
+
+```sh
+flutter analyze --no-pub
+flutter test --no-pub test/unit test/widget_test.dart test/subtitle_picker_test.dart test/downloads_page_test.dart --reporter expanded
+flutter test --no-pub test/integration/subtitle_download_test.dart --reporter expanded
+flutter test --no-pub test/integration/media_pipeline_test.dart --name 'MediaAssembler|cancellation' --reporter expanded
+flutter build linux --debug --no-pub
+```
+
+Explicit live subtitle reproduction (not enabled in the default test run):
+
+```sh
+flutter test --no-pub --dart-define=RUN_LIVE_SUBTITLE_TEST=true test/integration/youtube_subtitle_live_test.dart --reporter expanded
+```
 
 ## Open Issues Not Fixed in This Inspection
 
 These are source observations to reproduce and test before fixing; they are
 not failures found by the passing test commands above.
 
-1. `DownloadManager.retry()` calls `_pump()` and then `_execute()` directly.
-   A free slot can execute the same task twice; a full queue can bypass its
-   concurrency limit. Start with `lib/downloads/download_manager.dart`.
-2. Direct-provider metadata has no width/height, but Home uses
+1. Direct-provider metadata has no width/height, but Home uses
    `FormatSelector.selectBestVideo()`, which rejects formats without dimensions.
    Consequently, the normal UI path cannot select those direct downloads.
    Also, verification requires both video and audio even for recognized
    audio-only extensions.
-3. HLS language entries keep the first progressive per language after grouping
+2. HLS language entries keep the first progressive per language after grouping
    by resolution. The provider then ignores the selected DASH video and passes
    no expected height to verification. Selected quality is not enforced on
    this path (`youtube_format_mapper.dart`, `youtube_provider.dart`).
-4. Home chooses the first available language when the preferred language is
+3. Home chooses the first available language when the preferred language is
    absent, before applying the configured fallback during download selection.
    Do not assume the empty fallback setting prevents a language change.
-5. DownloadsPage watches AppController, while queue mutations notify the
-   separate DownloadManager. Individual tiles listen to their tasks, but
-   list removals and aggregate counts may not refresh until another rebuild.
-6. Language verification permits `eng` even when Arabic is expected, and does
+4. Language verification permits `eng` even when Arabic is expected, and does
    not generally normalize two-letter versus three-letter ISO language codes.
    Existing tests cover `und` tolerance and an Arabic/French mismatch only.
 
@@ -220,9 +270,12 @@ Other platform folders exist, but the source relies on desktop processes,
 
 Read this checkpoint and follow the user's next requested task. Use `main` as
 the sole branch for now, per the user's instruction, and use one-line
-Conventional Commit subjects. The previous 4K/Arabic download is complete,
-and no feature request is pending. The open
-issues above remain source observations; do not fix them without relevant scope.
+Conventional Commit subjects. Optional subtitle selection and the translated
+caption/queue fixes are implemented. Use `git status -sb` to check the current
+commit/push state. The specific Arabic
+caption failure has a passing live regression test; upstream YouTube throttling
+can still change. The open issues above remain source observations; do not fix
+them without relevant scope.
 
 ## Technique and Official References
 

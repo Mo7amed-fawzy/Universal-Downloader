@@ -74,6 +74,30 @@ language, or turn it off to choose an audio quality. Choose a **Container**
 (Auto, MP4, or MKV), then use **Choose** under **Output Folder** to select where
 the file will be saved. Click **Download** to start.
 
+**Subtitles** defaults to **None** each time you fetch a video. To include
+captions, choose one of the available tracks before downloading. Automatic
+captions are labeled **automatic** or **auto-translated**; subtitle language is
+independent of audio language. Videos without supported subtitle tracks keep
+this field disabled.
+
+![Subtitle selection with Arabic captions selected](docs/screenshots/subtitles.png)
+
+Auto-translated captions wait about one minute before downloading to allow
+YouTube's caption session to become ready. The task shows **Preparing translated
+subtitles** and remains cancellable. This addresses the
+[known yt-dlp/YouTube HTTP 429 issue](https://github.com/yt-dlp/yt-dlp/issues/13831).
+If YouTube still returns HTTP 429, wait a few minutes before retrying.
+
+![Download waiting for translated subtitles](docs/screenshots/preparing-subtitles.png)
+
+Selected captions are saved beside the video as a separate `.vtt` file (`.srt`
+when VTT is unavailable), using the same filename plus the language code, such
+as `Video.ar.vtt`. They are not burned into or embedded in the video. A selected
+subtitle download failure fails the task; select **None** and start a new task
+to download without captions. Keep **Automatic downloads** off to choose a
+subtitle track before starting. Caption downloads use
+[yt-dlp's subtitle options](https://github.com/yt-dlp/yt-dlp#subtitle-options).
+
 ![Video quality, audio quality, container, and output folder options](docs/screenshots/download-options.png)
 
 ### 4. Monitor Your Downloads
@@ -135,11 +159,12 @@ lib/
 
 Download steps for a two-stream (video-only + audio-only) YouTube task:
 
-1. Download the selected video stream to `temp/download_task_<id>/video.tmp`.
-2. Download the selected audio stream to `audio.tmp`.
-3. Merge both with ffmpeg stream copy (`-c:v copy -c:a copy -shortest`).
-4. Verify the final file with ffprobe.
-5. Clean up temp files only after successful verification.
+1. Download the selected subtitles, if any, into the task's temporary directory.
+2. Download the selected video stream to `temp/download_task_<id>/video.tmp`.
+3. Download the selected audio stream to `audio.tmp`.
+4. Merge both with ffmpeg stream copy (`-c:v copy -c:a copy -shortest`).
+5. Verify the final file with ffprobe and copy any selected subtitles beside it.
+6. Clean up temp files only after successful verification and subtitle saving.
 
 On failure the temp files are intentionally kept so the user can retry without
 re-downloading. Cancellation uses cooperative tokens: SIGTERM, then SIGKILL
