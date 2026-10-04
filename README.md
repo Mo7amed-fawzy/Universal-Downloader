@@ -178,6 +178,8 @@ Download steps for a two-stream (video-only + audio-only) YouTube task:
 3. Download the selected audio stream to `audio.tmp`.
 4. Merge both with ffmpeg stream copy and embed the cover. Cover-enabled merges
    omit `-shortest` to prevent the still image from truncating the video.
+   Merges write into a hidden staging directory in the output folder, then
+   atomically rename the finished file so thumbnailers never see partial output.
 5. Verify the media streams and expected cover with ffprobe, then copy any
    selected subtitles beside the video.
 6. Clean up temp files only after successful verification and subtitle saving.

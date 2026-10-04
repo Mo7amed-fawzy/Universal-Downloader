@@ -89,6 +89,9 @@ class MediaAssembler {
     if (cover != null && !isMp4 && !outputPath.endsWith('.mkv')) {
       throw MergeException('Embedded covers require MP4 or MKV output.');
     }
+    final out = File(outputPath);
+    final staging = await out.parent.createTemp('.universal-downloader-');
+    final pending = File('${staging.path}/${out.uri.pathSegments.last}');
     final coverInput = audio == null ? 1 : 2;
     final args = [
       '-y',
@@ -115,30 +118,34 @@ class MediaAssembler {
         'filename=cover.jpg',
       ],
       if (isMp4) ...['-movflags', '+faststart'],
-      outputPath,
+      pending.path,
     ];
 
-    final result = await runner.run(
-      executable: ffmpegPath,
-      arguments: args,
-      cancelToken: cancelToken,
-    );
-
-    if (!result.success) {
-      throw MergeException(
-        'FFmpeg could not merge the video and audio streams.',
-        details: _tail(result.stderr, 60),
+    try {
+      final result = await runner.run(
+        executable: ffmpegPath,
+        arguments: args,
+        cancelToken: cancelToken,
       );
-    }
 
-    final out = File(outputPath);
-    if (!out.existsSync() || out.lengthSync() == 0) {
-      throw MergeException(
-        'FFmpeg reported success but produced no output file.',
-        details: _tail(result.stderr, 60),
-      );
+      if (!result.success) {
+        throw MergeException(
+          'FFmpeg could not merge the video and audio streams.',
+          details: _tail(result.stderr, 60),
+        );
+      }
+
+      if (!pending.existsSync() || pending.lengthSync() == 0) {
+        throw MergeException(
+          'FFmpeg reported success but produced no output file.',
+          details: _tail(result.stderr, 60),
+        );
+      }
+      cancelToken?.throwIfCancelled();
+      return await pending.rename(outputPath);
+    } finally {
+      if (staging.existsSync()) await staging.delete(recursive: true);
     }
-    return out;
   }
 
   /// Verifies [file] with ffprobe.
