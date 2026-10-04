@@ -4,52 +4,61 @@ Last updated: 2026-10-04 (Africa/Cairo).
 
 ## Current Checkpoint
 
-Implemented optional YouTube subtitle downloads. Fetch Info exposes uploaded
-and automatic caption tracks (VTT preferred, SRT fallback), excluding live chat
-and unsupported/malformed entries. The Subtitles field defaults to **None** and
-resets at each fetch, including automatic-download mode. Audio language and
-subtitle language remain independent. Home download fields now share HomeInput.
+New YouTube downloads embed the original cover supplied by fetched metadata.
+YoutubeCoverDownloader uses cancellable FFmpeg HTTP(S) input with a 15-second
+I/O timeout to prepare a JPEG. MP4 stores an attached picture; MKV uses a
+cover.jpg attachment. Combined WebM downloads switch to MKV for cover support.
+Both separate-stream and combined/HLS paths copy video/audio without re-encoding.
+Missing thumbnail metadata leaves the previous behavior intact; a supplied
+cover that cannot be fetched or embedded fails the task for retry.
 
-The selected track downloads into the task directory before video/audio.
-After media verification it is copied beside the final, uniquely named video,
-e.g. `Video (1).ar.vtt`. Subtitles are separate files, not embedded or burned in.
-Missing/empty/failed caption downloads fail the task rather than silently
-omitting the user's selection. Cancellation uses the existing token; None adds
-no subtitle download process. Media stream commands explicitly disable subtitle
-writing; the caption command clears broader language selections from extra args.
-Both DASH merging and HLS combined-stream downloads preserve this behavior.
+MediaAssembler ignores attached pictures when checking actual video dimensions
+and requires an embedded cover when requested. Cover-enabled merges omit
+-shortest: real tests showed that combining it with MP4 artwork truncated
+video packets. Packet-hash comparisons now verify complete unchanged video/audio
+streams across MP4/MKV and separate/combined inputs. Downloads shows a cancellable
+Downloading cover phase. Direct downloads and subtitle choices are unchanged.
 
-README usage instructions describe the field and sidecar files. Two additional
-user-supplied screenshots show subtitle selection and the preparing phase.
-Their filenames are standardized as `subtitles.png` and
-`preparing-subtitles.png`; image contents are unchanged. The selection image
-predates the more specific auto-translated label. The original five screenshots
-remain unchanged.
+Verification on 2026-10-04: analysis and Linux debug build passed. The combined
+unit/widget/local-caption/cover run passed 88 tests; a subsequent focused run
+passed 11 cover tests (including two added cancellation/URL checks) plus five
+existing media/cancellation tests: 95 distinct local tests passed.
+A real YouTube cover was fetched for vNwCw6uVyTg and embedded into a temporary copy
+of the user's 4K VP9/AAC video at /tmp/universal-video-with-cover.mp4.
+ffprobe confirmed the JPEG attached picture and unchanged 3840x2160 resolution;
+ffmpegthumbnailer -m produced the original cover preview, visually inspected.
+No full new YouTube media download or desktop walkthrough was run.
 
-Follow-up fix on 2026-10-04: reproduced HTTP 429 downloading Arabic automatic
-captions for `https://youtu.be/vNwCw6uVyTg` (Flutter at Google I/O 2026 in 5
-minutes). A live comparison succeeded after yt-dlp's documented
-`--sleep-subtitles 60` wait. Caption URLs containing `tlang` now mark a track as
-auto-translated; only these tracks receive that wait. The queue displays a
-cancellable preparing-subtitles phase, then downloading when transfer starts.
-Persistent HTTP 429 responses now explain the actual rate-limit failure.
-Both default and subtitle output templates point into the task directory,
-keeping yt-dlp's intermediate subtitle files out of the working directory.
+Follow-up on 2026-10-04: the user downloaded Expansible (Widget of the Week).mp4.
+ffprobe confirmed 4K VP9/AAC plus the original 1280x720 JPEG attached picture;
+the downloader worked, but Nemo preferred a video frame. With approval, installed
+~/.local/share/thumbnailers/ffmpegthumbnailer.thumbnailer, copying the system
+definition with -m added to prefer embedded covers. Regenerated only Expansible's
+normal/large cache entries through CinnamonDesktop.DesktopThumbnailFactory;
+both validate, and the large cached preview was visually confirmed as the
+original YouTube cover. Old large preview: /tmp/expansible-previous-cached-thumbnail.png.
+The user then downloaded the same filename again (now VP9/Opus with the JPEG
+cover intact), but Nemo regenerated a video-frame preview. Its process had been
+running since 09:36, before the thumbnailer override, and retained the old
+command. With approval, quit Nemo, regenerated this file's cache, and reopened
+Videos at 13:45. Visually confirmed the original blue Expansible artwork in the
+actual folder view; screenshot: /tmp/universal-thumbnail-nemo-verified.png.
+F5 alone was insufficient: Nemo needed a full restart to load the override.
+Video files are unchanged; other existing cached previews were not refreshed.
+This is a per-user desktop configuration, not an application setting or tracked
+repo file. No application code changed or tests reran for these desktop-only fixes.
+Cover embedding and its regression tests are committed as c2525a3 on main;
+README guidance and this handoff form a separate documentation commit.
+Before committing, analysis and 32 focused subtitle/cover tests passed again.
+This commit-only request did not push to GitHub; check git status for the
+current local/remote relationship.
 
-Also fixed the reported stale active count: DownloadsPage now listens to
-DownloadManager. Retry goes through the queue exactly once and respects its
-concurrency limit; already-running IDs are excluded from pending scheduling.
-
-Verification: static analysis and Linux debug build passed; 73 unit/widget
-tests, five local media/cancellation checks, and two local real-yt-dlp caption
-tests passed (80 local tests). A separate opt-in live regression test used the
-actual Dart extractor/mapper/downloader on the reported video and successfully
-downloaded VTT with `Language: ar`, timed cues, and Arabic text in 74 seconds.
-The CLI comparison output remains at
-`/tmp/universal-subtitle-repro/subtitles.ar.vtt`. No full 4K video download or
-desktop walkthrough was repeated. Restart the running app to load this build.
-The subtitle feature, retry scheduling fix, Downloads UI refresh, and updated
-documentation/screenshots are grouped into four focused commits for `main`.
+Previous completed functionality remains: optional uploaded/automatic subtitles
+default to None on every fetch and are saved beside the video as VTT/SRT.
+Auto-translated captions wait 60 seconds before fetching to address a reproduced
+YouTube HTTP 429 issue; the prior live Arabic-caption regression passed.
+Queue retries respect concurrency and execute once; Downloads listens to task
+changes. Those features and their docs were committed through 8adc1ed.
 
 ## Repository History
 
@@ -210,6 +219,7 @@ Run the current feature checks with:
 flutter analyze --no-pub
 flutter test --no-pub test/unit test/widget_test.dart test/subtitle_picker_test.dart test/downloads_page_test.dart --reporter expanded
 flutter test --no-pub test/integration/subtitle_download_test.dart --reporter expanded
+flutter test --no-pub test/integration/media_cover_test.dart --reporter expanded
 flutter test --no-pub test/integration/media_pipeline_test.dart --name 'MediaAssembler|cancellation' --reporter expanded
 flutter build linux --debug --no-pub
 ```
@@ -270,8 +280,9 @@ Other platform folders exist, but the source relies on desktop processes,
 
 Read this checkpoint and follow the user's next requested task. Use `main` as
 the sole branch for now, per the user's instruction, and use one-line
-Conventional Commit subjects. Optional subtitle selection and the translated
-caption/queue fixes are implemented. Use `git status -sb` to check the current
+Conventional Commit subjects. Original YouTube cover embedding, optional subtitle
+selection, and the translated caption/queue fixes are implemented. Use
+`git status -sb` to check the current
 commit/push state. The specific Arabic
 caption failure has a passing live regression test; upstream YouTube throttling
 can still change. The open issues above remain source observations; do not fix

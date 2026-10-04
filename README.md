@@ -110,6 +110,19 @@ Active tasks have a **Cancel** button; failed tasks provide **View details** and
 
 ![Downloads screen showing a completed video and an active download](docs/screenshots/downloads.png)
 
+New YouTube downloads automatically include the original YouTube cover image
+inside the saved MP4 or MKV when the video metadata provides one. Video and
+audio are copied without re-encoding. Combined WebM downloads use MKV to support
+the attachment. A cover download or embedding failure fails the task so it can
+be retried. Existing downloads are not modified.
+
+MP4 uses FFmpeg's [embedded cover support](https://ffmpeg.org/ffmpeg.html#Main-options);
+MKV stores a JPEG attachment. File managers and players may still choose a video
+frame for previews. On Linux, `ffmpegthumbnailer` needs its `-m` option to prefer
+embedded artwork; existing cached previews may need refreshing.
+After changing a thumbnailer definition, restart Nemo so it loads the new
+command. Refreshing the folder alone may keep using the previous command.
+
 ### 5. Configure Settings
 
 In **Settings**, configure the default folder, video quality, and preferred
@@ -159,11 +172,14 @@ lib/
 
 Download steps for a two-stream (video-only + audio-only) YouTube task:
 
-1. Download the selected subtitles, if any, into the task's temporary directory.
+1. Download the original cover, when available, and selected subtitles into the
+   task's temporary directory.
 2. Download the selected video stream to `temp/download_task_<id>/video.tmp`.
 3. Download the selected audio stream to `audio.tmp`.
-4. Merge both with ffmpeg stream copy (`-c:v copy -c:a copy -shortest`).
-5. Verify the final file with ffprobe and copy any selected subtitles beside it.
+4. Merge both with ffmpeg stream copy and embed the cover. Cover-enabled merges
+   omit `-shortest` to prevent the still image from truncating the video.
+5. Verify the media streams and expected cover with ffprobe, then copy any
+   selected subtitles beside the video.
 6. Clean up temp files only after successful verification and subtitle saving.
 
 On failure the temp files are intentionally kept so the user can retry without
