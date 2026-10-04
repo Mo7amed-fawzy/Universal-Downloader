@@ -41,6 +41,63 @@ The bundle is written to `build/linux/x64/release/bundle/`. Run it with:
 ./build/linux/x64/release/bundle/universal_downloader
 ```
 
+## How to Use
+
+Open the Linux application with the bundle command above. To run it directly
+from the source project during development, use:
+
+```sh
+flutter run -d linux
+```
+
+### 1. Paste a Video Link
+
+On **Home**, paste a YouTube video link into the URL field. The clipboard button
+can paste a link you have already copied. Click **Fetch Info** and wait for the
+video's details and available formats to appear.
+
+![Home screen with URL input and Fetch Info button](docs/screenshots/home.png)
+
+### 2. Review the Video Details
+
+Check the video's title, duration, and available audio languages. Choose
+**Video Quality**, then review the **Audio** language. Select Arabic when it is
+available, or choose another listed language. Available tracks depend on the
+video; check the selected language before downloading.
+
+![Fetched video details with available formats and Arabic audio selected](docs/screenshots/video-details.jpg)
+
+### 3. Choose Download Options
+
+Keep automatic audio selection enabled to use the best track in the selected
+language, or turn it off to choose an audio quality. Choose a **Container**
+(Auto, MP4, or MKV), then use **Choose** under **Output Folder** to select where
+the file will be saved. Click **Download** to start.
+
+![Video quality, audio quality, container, and output folder options](docs/screenshots/download-options.png)
+
+### 4. Monitor Your Downloads
+
+The app opens **Downloads**, where each task shows its progress through
+downloading, merging when needed, and verification. When a task shows
+**Completed**, click its folder icon (**Open location**) to find the saved file.
+Active tasks have a **Cancel** button; failed tasks provide **View details** and
+**Retry**. Use **Clear finished** to remove finished entries from the list.
+
+![Downloads screen showing a completed video and an active download](docs/screenshots/downloads.png)
+
+### 5. Configure Settings
+
+In **Settings**, configure the default folder, video quality, and preferred
+audio language (`ar` for Arabic or `en` for English). Keep **Automatic downloads**
+off when you want to review the formats before each download.
+
+![Settings screen with dependency status and default download preferences](docs/screenshots/settings.png)
+
+If a missing-dependency banner appears, install `yt-dlp`, `ffmpeg`, and `ffprobe`
+as described in Requirements. For tools installed outside your `PATH`, enter
+their executable paths in **Settings**, then click **Check again**.
+
 ## Test
 
 ```sh

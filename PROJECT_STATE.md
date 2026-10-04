@@ -4,6 +4,23 @@ Last updated: 2026-10-04 (Africa/Cairo).
 
 ## Current Checkpoint
 
+Added a README **How to Use** section covering launch, URL entry, Fetch Info,
+quality/audio/container selection, output folder, task controls, and settings.
+The section embeds five screenshots in `docs/screenshots/`: `home.png`,
+`video-details.jpg`, `download-options.png`, `downloads.png`, and `settings.png`.
+Home was captured from the running Linux app; the user supplied the four
+additional screenshots. Their filenames were corrected and standardized,
+including removal of spaces and a stray backslash. Image contents were retained.
+
+Verification for this documentation task: `flutter build linux --debug --no-pub`
+succeeded; the resulting app was opened and its Home screen visually inspected.
+All five images were visually inspected and their relative Markdown links
+checked. The user's Downloads screenshot shows completed and active tasks;
+no additional live download or test-suite run was performed by the agent for
+this documentation update. Application source was not changed.
+
+## Repository History
+
 Repository: `https://github.com/Mo7amed-fawzy/Universal-Downloader.git`.
 Use `main` as the only branch. The user requested focused commits instead of
 the broad initial application commit. The replacement history separates build
