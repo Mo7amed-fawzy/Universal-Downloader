@@ -4,6 +4,53 @@ Last updated: 2026-10-04 (Africa/Cairo).
 
 ## Current Checkpoint
 
+Atomic media publication is committed as `872e1d7`. MediaAssembler merges into
+a unique hidden directory on the destination filesystem, then atomically
+renames the completed file. Failure, cancellation, or empty output removes
+staging and preserves an existing destination; raw inputs remain for retry.
+Five regression tests cover publication and failure cleanup.
+
+The separate subtitle-file toggle is committed as `e284efc`.
+**Add separate subtitle file** defaults to off and is disabled for None.
+Turning it off retains the selected language but submits no subtitle request.
+Selecting None or fetching another video clears the toggle. HomeInput owns
+this state; SubtitleFileSwitch is a dedicated widget. README explains it.
+
+The latest Expansible download (14:31 on 2026-10-04) contains the correct
+1280x720 JPEG cover, 3840x2160 VP9 video, and AAC audio. Its thumbnail caches
+were stale, with a failed entry for the current file mtime. The running app
+started at 14:25 after the publication fix, so the earlier partial-write
+explanation is not established for this recurrence.
+
+Nemo's stderr pointed to a pipe from an earlier tool launch. A controlled
+reproduction made ffmpegthumbnailer exit with SIGPIPE when stderr had no
+reader; the same command succeeded with redirected stderr. This supports a
+desktop process-output problem, although the original failed child was not
+traced. Restarted Nemo with output redirected to
+`/tmp/nemo-thumbnail-session.log` and preserved Home/Videos windows. Only this
+video's stale/failed cache entries were backed up under
+`/tmp/expansible-thumbnail-backup-1431/` and removed. Nemo automatically
+regenerated the preview; GIO reports a valid cache, and the original cover
+was visually confirmed in Videos. Screenshot:
+`/tmp/expansible-nemo-fixed-final.png`. The video was not modified.
+When launching GUI programs from tools, redirect long-lived stdout/stderr to
+a file or `/dev/null`.
+
+The user's screenshot is included in README as
+`docs/screenshots/downloaded-video-with-subtitles-and-thumbnail.png`, with
+its filename spelling corrected.
+
+Commit-session verification on 2026-10-04: `flutter analyze --no-pub` passed;
+42 tests passed across `media_publication_test.dart`,
+`youtube_subtitles_test.dart`, `subtitle_picker_test.dart`, and
+`integration/media_cover_test.dart`. These include real local FFmpeg/FFprobe
+cover and packet-preservation checks. No live download or build was rerun
+for this commit request; earlier analysis/build results remain recorded below.
+The commits are local; no push was requested. Next: follow the user's request;
+the open source observations below remain unresolved.
+
+## Previous Cover Checkpoint
+
 New YouTube downloads embed the original cover supplied by fetched metadata.
 YoutubeCoverDownloader uses cancellable FFmpeg HTTP(S) input with a 15-second
 I/O timeout to prepare a JPEG. MP4 stores an attached picture; MKV uses a

@@ -121,6 +121,8 @@ audio are copied without re-encoding. Combined WebM downloads use MKV to support
 the attachment. A cover download or embedding failure fails the task so it can
 be retried. Existing downloads are not modified.
 
+![Downloaded video showing its YouTube thumbnail beside the separate Arabic subtitle file](docs/screenshots/downloaded-video-with-subtitles-and-thumbnail.png)
+
 MP4 uses FFmpeg's [embedded cover support](https://ffmpeg.org/ffmpeg.html#Main-options);
 MKV stores a JPEG attachment. File managers and players may still choose a video
 frame for previews. On Linux, `ffmpegthumbnailer` needs its `-m` option to prefer
