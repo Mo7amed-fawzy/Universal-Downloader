@@ -126,3 +126,12 @@ if(NOT CMAKE_BUILD_TYPE MATCHES "Debug")
   install(FILES "${AOT_LIBRARY}" DESTINATION "${INSTALL_BUNDLE_LIB_DIR}"
     COMPONENT Runtime)
 endif()
+
+set(MEDIA_TOOLS_DIR "${CMAKE_CURRENT_SOURCE_DIR}/../build/tool-runtime")
+if(EXISTS "${MEDIA_TOOLS_DIR}/manifest.json")
+  install(DIRECTORY "${MEDIA_TOOLS_DIR}/"
+    DESTINATION "${CMAKE_INSTALL_PREFIX}/tools"
+    USE_SOURCE_PERMISSIONS COMPONENT Runtime)
+elseif(NOT CMAKE_BUILD_TYPE MATCHES "Debug")
+  message(FATAL_ERROR "Included tools are missing. Run python3 tool/prepare_tools.py first.")
+endif()
