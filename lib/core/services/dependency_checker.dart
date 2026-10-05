@@ -36,19 +36,17 @@ class DependencyChecker {
     this.ytDlpPathOverride,
     this.ffmpegPathOverride,
     this.ffprobePathOverride,
+    this.denoPathOverride,
   }) : runner = runner ?? const ProcessRunner();
 
   final ProcessRunner runner;
-  final String? ytDlpPathOverride;
-  final String? ffmpegPathOverride;
-  final String? ffprobePathOverride;
+  String? ytDlpPathOverride;
+  String? ffmpegPathOverride;
+  String? ffprobePathOverride;
+  String? denoPathOverride;
 
-  static const _ytDlpInstall = 'Install with: pipx install yt-dlp  '
-      '(or: pip install -U yt-dlp).';
-  static const _ffmpegInstall = 'Install with your package manager, e.g.:\n'
-      '  sudo apt install ffmpeg  (Debian/Ubuntu)\n'
-      '  sudo dnf install ffmpeg   (Fedora)\n'
-      '  sudo pacman -S ffmpeg     (Arch).';
+  static const _repairInstructions =
+      'Restore the included tools in Advanced → Diagnostics, or reinstall the complete app package.';
 
   Future<List<DependencyStatus>> checkAll() async {
     return Future.wait([
@@ -56,22 +54,29 @@ class DependencyChecker {
         name: 'yt-dlp',
         overridePath: ytDlpPathOverride,
         versionArgs: const ['--version'],
-        installInstructions: _ytDlpInstall,
+        installInstructions: _repairInstructions,
         versionPattern: RegExp(r'([\d.]+)'),
       ),
       _check(
         name: 'ffmpeg',
         overridePath: ffmpegPathOverride,
         versionArgs: const ['-version'],
-        installInstructions: _ffmpegInstall,
+        installInstructions: _repairInstructions,
         versionPattern: RegExp(r'ffmpeg version (\S+)'),
       ),
       _check(
         name: 'ffprobe',
         overridePath: ffprobePathOverride,
         versionArgs: const ['-version'],
-        installInstructions: _ffmpegInstall,
+        installInstructions: _repairInstructions,
         versionPattern: RegExp(r'ffprobe version (\S+)'),
+      ),
+      _check(
+        name: 'deno',
+        overridePath: denoPathOverride,
+        versionArgs: const ['--version'],
+        installInstructions: _repairInstructions,
+        versionPattern: RegExp(r'deno (\S+)'),
       ),
     ]);
   }
@@ -85,8 +90,10 @@ class DependencyChecker {
   }) async {
     var executable = overridePath;
 
-    if (executable == null || !File(executable).existsSync()) {
-      executable = await _resolveFromPath(name);
+    if (executable == null || executable.isEmpty || !executable.contains('/')) {
+      executable = await _resolveFromPath(
+        executable == null || executable.isEmpty ? name : executable,
+      );
     }
 
     if (executable == null) {
@@ -105,20 +112,18 @@ class DependencyChecker {
 
     return DependencyStatus(
       name: name,
-      installed: true,
+      installed: version != null,
+      installInstructions: version == null ? installInstructions : null,
       path: executable,
       version: version,
     );
   }
 
   Future<String?> _resolveFromPath(String name) async {
-    try {
-      final result = await runner.run(executable: 'which', arguments: [name]);
-      if (result.success && result.stdout.trim().isNotEmpty) {
-        return result.stdout.trim().split('\n').first;
-      }
-    } catch (_) {
-      // fall through
+    for (final directory in (Platform.environment['PATH'] ?? '').split(':')) {
+      if (directory.isEmpty) continue;
+      final file = File('$directory/$name');
+      if (await file.exists()) return file.absolute.path;
     }
     return null;
   }

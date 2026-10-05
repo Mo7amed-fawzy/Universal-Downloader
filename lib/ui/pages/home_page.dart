@@ -84,6 +84,7 @@ class _HomePageState extends State<HomePage> {
 
   Future<void> _fetchInfo() async {
     final controller = context.read<AppController>();
+    if (controller.updatingTools) return;
     final text = _urlController.text.trim();
     if (text.isEmpty) {
       _urlFocusNode.requestFocus();
@@ -164,6 +165,7 @@ class _HomePageState extends State<HomePage> {
 
   Future<void> _startDownload() async {
     final controller = context.read<AppController>();
+    if (controller.updatingTools) return;
     final info = _info;
     if (info == null) return;
 

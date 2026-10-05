@@ -6,6 +6,8 @@ import '../core/process/process_runner.dart';
 import '../core/services/dependency_checker.dart';
 import '../core/services/log_service.dart';
 import '../core/utils/path_utils.dart';
+import '../core/tools/tool_paths.dart';
+import '../core/tools/tool_update_service.dart';
 import '../downloads/download_manager.dart';
 import '../downloads/download_repository.dart';
 import '../providers/direct/direct_media_provider.dart';
@@ -25,6 +27,7 @@ class AppController extends ChangeNotifier {
     required this.manager,
     required this.dependencyChecker,
     required this.pathUtils,
+    required this.toolPaths,
   });
 
   final LogService log;
@@ -34,6 +37,9 @@ class AppController extends ChangeNotifier {
   final DownloadManager manager;
   final DependencyChecker dependencyChecker;
   final PathUtils pathUtils;
+  final ToolPaths toolPaths;
+  bool updatingTools = false;
+  String? toolUpdateMessage;
 
   List<DependencyStatus> dependencies = const [];
   bool checkingDependencies = false;
@@ -56,16 +62,19 @@ class AppController extends ChangeNotifier {
     final repository = DownloadRepository(paths: pathUtils);
     final runner = const ProcessRunner();
 
-    final ytDlp = settings.ytDlpPath.isNotEmpty ? settings.ytDlpPath : 'yt-dlp';
-    final ffmpeg =
-        settings.ffmpegPath.isNotEmpty ? settings.ffmpegPath : 'ffmpeg';
-    final ffprobe =
-        settings.ffprobePath.isNotEmpty ? settings.ffprobePath : 'ffprobe';
+    final toolPaths = ToolPaths();
+    final ytDlp = toolPaths.resolve('yt-dlp', override: settings.ytDlpPath);
+    final ffmpeg = toolPaths.resolve('ffmpeg', override: settings.ffmpegPath);
+    final ffprobe = toolPaths.resolve(
+      'ffprobe',
+      override: settings.ffprobePath,
+    );
 
     final youtubeProvider = YoutubeProvider(
       ytDlpPath: ytDlp,
       ffmpegPath: ffmpeg,
       ffprobePath: ffprobe,
+      denoPath: toolPaths.resolve('deno'),
       runner: runner,
       repository: repository,
       log: log,
@@ -79,15 +88,7 @@ class AppController extends ChangeNotifier {
 
     final registry = ProviderRegistry([youtubeProvider, directProvider]);
 
-    final checker = DependencyChecker(
-      runner: runner,
-      ytDlpPathOverride:
-          settings.ytDlpPath.isNotEmpty ? settings.ytDlpPath : null,
-      ffmpegPathOverride:
-          settings.ffmpegPath.isNotEmpty ? settings.ffmpegPath : null,
-      ffprobePathOverride:
-          settings.ffprobePath.isNotEmpty ? settings.ffprobePath : null,
-    );
+    final checker = DependencyChecker(runner: runner);
 
     final manager = DownloadManager(
       registry: registry,
@@ -103,6 +104,7 @@ class AppController extends ChangeNotifier {
       manager: manager,
       dependencyChecker: checker,
       pathUtils: pathUtils,
+      toolPaths: toolPaths,
     );
 
     controller._applySettings();
@@ -112,20 +114,42 @@ class AppController extends ChangeNotifier {
 
   void _applySettings() {
     log.debugEnabled = settings.debugLogging;
+    dependencyChecker.ytDlpPathOverride = toolPaths.resolve(
+      'yt-dlp',
+      override: settings.ytDlpPath,
+    );
+    dependencyChecker.ffmpegPathOverride = toolPaths.resolve(
+      'ffmpeg',
+      override: settings.ffmpegPath,
+    );
+    dependencyChecker.ffprobePathOverride = toolPaths.resolve(
+      'ffprobe',
+      override: settings.ffprobePath,
+    );
+    dependencyChecker.denoPathOverride = toolPaths.resolve('deno');
     final ytDlp = registry.byId('youtube');
     if (ytDlp is YoutubeProvider) {
-      ytDlp.ytDlpPath =
-          settings.ytDlpPath.isNotEmpty ? settings.ytDlpPath : 'yt-dlp';
-      ytDlp.ffmpegPath =
-          settings.ffmpegPath.isNotEmpty ? settings.ffmpegPath : 'ffmpeg';
-      ytDlp.ffprobePath =
-          settings.ffprobePath.isNotEmpty ? settings.ffprobePath : 'ffprobe';
+      ytDlp.ytDlpPath = toolPaths.resolve(
+        'yt-dlp',
+        override: settings.ytDlpPath,
+      );
+      ytDlp.ffmpegPath = toolPaths.resolve(
+        'ffmpeg',
+        override: settings.ffmpegPath,
+      );
+      ytDlp.ffprobePath = toolPaths.resolve(
+        'ffprobe',
+        override: settings.ffprobePath,
+      );
+      ytDlp.denoPath = toolPaths.resolve('deno');
       ytDlp.setExtraYtDlpArgs(settings.extraYtDlpArgs);
     }
     final direct = registry.byId('direct');
     if (direct is DirectMediaProvider) {
-      direct.ffprobePath =
-          settings.ffprobePath.isNotEmpty ? settings.ffprobePath : 'ffprobe';
+      direct.ffprobePath = toolPaths.resolve(
+        'ffprobe',
+        override: settings.ffprobePath,
+      );
     }
   }
 
@@ -151,6 +175,48 @@ class AppController extends ChangeNotifier {
       dependencies = await dependencyChecker.checkAll();
     } finally {
       checkingDependencies = false;
+      notifyListeners();
+    }
+  }
+
+  Future<void> updateTools({bool restoreIncluded = false}) async {
+    if (updatingTools) return;
+    if (manager.tasks.any((task) => task.state.isActive)) {
+      toolUpdateMessage =
+          'Finish or cancel queued downloads before changing tools.';
+      notifyListeners();
+      return;
+    }
+    updatingTools = true;
+    toolUpdateMessage = restoreIncluded
+        ? 'Restoring included tools…'
+        : 'Checking for updates…';
+    notifyListeners();
+    try {
+      if (restoreIncluded) {
+        await toolPaths.useIncluded();
+        settings = settings.copyWith(
+          ytDlpPath: '',
+          ffmpegPath: '',
+          ffprobePath: '',
+        );
+        await settingsService.save(settings);
+        toolUpdateMessage = 'Using the tools included with the app.';
+      } else {
+        toolUpdateMessage = await ToolUpdateService(toolPaths).update(
+          onStatus: (message) {
+            toolUpdateMessage = message;
+            notifyListeners();
+          },
+        );
+      }
+      _applySettings();
+      await refreshDependencies();
+    } catch (error) {
+      toolUpdateMessage =
+          'Could not update tools. Your current tools were kept. $error';
+    } finally {
+      updatingTools = false;
       notifyListeners();
     }
   }

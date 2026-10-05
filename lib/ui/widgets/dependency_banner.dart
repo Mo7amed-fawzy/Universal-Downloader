@@ -16,7 +16,6 @@ class DependencyBanner extends StatelessWidget {
 
     if (missing.isEmpty) return const SizedBox.shrink();
 
-    final names = missing.map((d) => d.name).join(', ');
 
     return Card(
       color: Theme.of(context).colorScheme.errorContainer,
@@ -31,8 +30,8 @@ class DependencyBanner extends StatelessWidget {
             const SizedBox(width: 12),
             Expanded(
               child: Text(
-                'Required tools missing: $names. Downloads will not work. '
-                'Open Settings to see install instructions.',
+                'Download components are unavailable. Open Settings → '
+                'Advanced → Diagnostics to restore the included tools.',
                 style: Theme.of(context)
                     .textTheme
                     .bodyMedium

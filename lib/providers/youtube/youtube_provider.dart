@@ -23,12 +23,13 @@ class YoutubeProvider implements DownloaderProvider {
     required this.ytDlpPath,
     required this.ffmpegPath,
     required this.ffprobePath,
+    this.denoPath,
     ProcessRunner? runner,
     DownloadRepository? repository,
     LogService? log,
-  })  : _runner = runner ?? const ProcessRunner(),
-        _repository = repository ?? DownloadRepository(),
-        _log = log ?? LogService();
+  }) : _runner = runner ?? const ProcessRunner(),
+       _repository = repository ?? DownloadRepository(),
+       _log = log ?? LogService();
 
   final ProcessRunner _runner;
   final DownloadRepository _repository;
@@ -36,6 +37,7 @@ class YoutubeProvider implements DownloaderProvider {
   String ytDlpPath;
   String ffmpegPath;
   String ffprobePath;
+  String? denoPath;
   String _extraArgs = '';
 
   @override
@@ -47,15 +49,25 @@ class YoutubeProvider implements DownloaderProvider {
   /// Additional raw yt-dlp arguments from user settings (whitespace split).
   void setExtraYtDlpArgs(String value) => _extraArgs = value;
 
-  List<String> get _extraArgList => _extraArgs.trim().isEmpty
-      ? const []
-      : _extraArgs.trim().split(RegExp(r'\s+'));
+  List<String> get _extraArgList => [
+    if (denoPath != null) ...[
+      '--ignore-config',
+      '--no-remote-components',
+      '--no-js-runtimes',
+      '--js-runtimes',
+      'deno:$denoPath',
+      '--ffmpeg-location',
+      ffmpegPath,
+    ],
+    if (_extraArgs.trim().isNotEmpty)
+      ..._extraArgs.trim().split(RegExp(r'\s+')),
+  ];
 
   MediaAssembler get _assembler => MediaAssembler(
-        ffmpegPath: ffmpegPath,
-        ffprobePath: ffprobePath,
-        runner: _runner,
-      );
+    ffmpegPath: ffmpegPath,
+    ffprobePath: ffprobePath,
+    runner: _runner,
+  );
 
   static const _progressParser = YtDlpProgressParser();
 
@@ -92,9 +104,7 @@ class YoutubeProvider implements DownloaderProvider {
       final progressives = await extractor.listM3u8Progressives(url);
       if (progressives.isNotEmpty) {
         info = mapper.mergeM3u8Progressives(info, progressives);
-        _log.info(
-          'Merged ${progressives.length} m3u8 progressive formats',
-        );
+        _log.info('Merged ${progressives.length} m3u8 progressive formats');
       }
     } catch (_) {
       // Non-fatal: fall back to DASH-only info.
@@ -153,26 +163,32 @@ class YoutubeProvider implements DownloaderProvider {
       File? subtitleTmp;
       final subtitle = options.subtitle;
       if (subtitle != null) {
-        if (!media.subtitleTracks.any((track) =>
-            track.id == subtitle.id && track.extension == subtitle.extension)) {
+        if (!media.subtitleTracks.any(
+          (track) =>
+              track.id == subtitle.id && track.extension == subtitle.extension,
+        )) {
           throw DownloadFailedException(
             'The selected subtitles are unavailable. Fetch info again.',
           );
         }
-        onPhase(subtitle.isTranslated
-            ? DownloadTaskState.waitingForSubtitles
-            : DownloadTaskState.downloadingSubtitles);
-        subtitleTmp = await YoutubeSubtitleDownloader(
-          ytDlpPath: ytDlpPath,
-          runner: _runner,
-          extraArgs: _extraArgList,
-        ).download(
-          url: media.pageUrl,
-          track: subtitle,
-          directory: tempDir,
-          cancelToken: cancelToken,
-          onDownloadStarted: () => onPhase(DownloadTaskState.downloadingSubtitles),
+        onPhase(
+          subtitle.isTranslated
+              ? DownloadTaskState.waitingForSubtitles
+              : DownloadTaskState.downloadingSubtitles,
         );
+        subtitleTmp =
+            await YoutubeSubtitleDownloader(
+              ytDlpPath: ytDlpPath,
+              runner: _runner,
+              extraArgs: _extraArgList,
+            ).download(
+              url: media.pageUrl,
+              track: subtitle,
+              directory: tempDir,
+              cancelToken: cancelToken,
+              onDownloadStarted: () =>
+                  onPhase(DownloadTaskState.downloadingSubtitles),
+            );
       }
       if (progressiveId != null) {
         // m3u8 progressive: download the muxed stream directly as video.
@@ -218,8 +234,12 @@ class YoutubeProvider implements DownloaderProvider {
             targetHeight: videoFormat?.height,
             isVideo: true,
           );
-          if (remappedId == null || remappedId == options.videoFormatId) rethrow;
-          _log.info('Remapped video format ${options.videoFormatId} → $remappedId');
+          if (remappedId == null || remappedId == options.videoFormatId) {
+            rethrow;
+          }
+          _log.info(
+            'Remapped video format ${options.videoFormatId} → $remappedId',
+          );
           await _downloadStream(
             media.pageUrl,
             remappedId,
@@ -407,7 +427,9 @@ class YoutubeProvider implements DownloaderProvider {
       url.toString(),
     ];
 
-    _log.info('yt-dlp download args: -f $formatId (extractor: ${baseArgs.join(' ')})');
+    _log.info(
+      'yt-dlp download args: -f $formatId (extractor: ${baseArgs.join(' ')})',
+    );
 
     final result = await _runner.run(
       executable: ytDlpPath,
@@ -447,6 +469,7 @@ class YoutubeProvider implements DownloaderProvider {
         executable: ytDlpPath,
         arguments: [
           ...YoutubeExtractor.downloadBaseArgs(),
+          ..._extraArgList,
           '--dump-single-json',
           '--skip-download',
           url.toString(),
@@ -486,8 +509,7 @@ class YoutubeProvider implements DownloaderProvider {
   }
 
   static String _tail(String stderr) {
-    final lines =
-        stderr.split('\n').where((l) => l.trim().isNotEmpty).toList();
+    final lines = stderr.split('\n').where((l) => l.trim().isNotEmpty).toList();
     if (lines.length <= 80) return lines.join('\n');
     return '... (${lines.length - 80} more) ...\n'
         '${lines.sublist(lines.length - 80).join('\n')}';

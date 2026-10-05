@@ -4,10 +4,11 @@ import 'package:provider/provider.dart';
 
 import '../../app/app_controller.dart';
 import '../../core/models/download_options.dart';
-import '../../core/services/dependency_checker.dart';
 import '../../providers/format_selector.dart';
 import '../../settings/app_settings.dart';
 import '../widgets/app_scaffold.dart';
+import '../widgets/advanced_settings_section.dart';
+import '../widgets/tool_diagnostics.dart';
 
 /// Settings and dependency status.
 class SettingsPage extends StatefulWidget {
@@ -69,6 +70,18 @@ class _SettingsPageState extends State<SettingsPage> {
     ));
   }
 
+  Future<void> _restoreIncludedTools() async {
+    final controller = context.read<AppController>();
+    await controller.updateTools(restoreIncluded: true);
+    if (!mounted) return;
+    setState(() {
+      _draft = controller.settings;
+      _ytDlpPathController.text = _draft.ytDlpPath;
+      _ffmpegPathController.text = _draft.ffmpegPath;
+      _ffprobePathController.text = _draft.ffprobePath;
+    });
+  }
+
   Future<void> _pickDefaultDir() async {
     final dir = await getDirectoryPath(
       initialDirectory: _dirController.text.trim().isEmpty
@@ -90,12 +103,6 @@ class _SettingsPageState extends State<SettingsPage> {
         padding: const EdgeInsets.all(24),
         children: [
           Text('Settings', style: Theme.of(context).textTheme.headlineSmall),
-          const SizedBox(height: 16),
-          _DependenciesCard(
-            dependencies: controller.dependencies,
-            checking: controller.checkingDependencies,
-            onRefresh: () => controller.refreshDependencies(),
-          ),
           const SizedBox(height: 16),
           _SectionCard(
             title: 'General',
@@ -221,9 +228,13 @@ class _SettingsPageState extends State<SettingsPage> {
             ],
           ),
           const SizedBox(height: 16),
-          _SectionCard(
-            title: 'Advanced',
+          AdvancedSettingsSection(
             children: [
+              ToolDiagnostics(
+                controller: controller,
+                onRestoreIncluded: _restoreIncludedTools,
+              ),
+              const SizedBox(height: 12),
               _PathField(
                 controller: _ytDlpPathController,
                 label: 'yt-dlp executable path',
@@ -349,7 +360,7 @@ class _PathField extends StatelessWidget {
           child: _TextField(
             controller: controller,
             label: label,
-            hint: 'Leave empty to auto-detect',
+            hint: 'Leave empty to use included tools',
             onSaved: onSaved,
           ),
         ),
@@ -362,95 +373,6 @@ class _PathField extends StatelessWidget {
           child: const Text('Auto'),
         ),
       ],
-    );
-  }
-}
-
-class _DependenciesCard extends StatelessWidget {
-  const _DependenciesCard({
-    required this.dependencies,
-    required this.checking,
-    required this.onRefresh,
-  });
-
-  final List<DependencyStatus> dependencies;
-  final bool checking;
-  final VoidCallback onRefresh;
-
-  @override
-  Widget build(BuildContext context) {
-    final theme = Theme.of(context);
-    return Card(
-      child: Padding(
-        padding: const EdgeInsets.all(16),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Row(
-              children: [
-                Text('Dependencies', style: theme.textTheme.titleMedium),
-                const Spacer(),
-                TextButton.icon(
-                  onPressed: checking ? null : onRefresh,
-                  icon: Icon(
-                    checking
-                        ? Icons.hourglass_top
-                        : Icons.refresh,
-                  ),
-                  label: Text(checking ? 'Checking...' : 'Check again'),
-                ),
-              ],
-            ),
-            for (final dep in dependencies) _dependencyRow(context, dep),
-          ],
-        ),
-      ),
-    );
-  }
-
-  Widget _dependencyRow(BuildContext context, DependencyStatus dep) {
-    final theme = Theme.of(context);
-    final ok = dep.installed;
-    return Padding(
-      padding: const EdgeInsets.symmetric(vertical: 8),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Row(
-            children: [
-              Icon(
-                ok ? Icons.check_circle : Icons.error_outline,
-                size: 20,
-                color: ok ? Colors.green : theme.colorScheme.error,
-              ),
-              const SizedBox(width: 10),
-              SizedBox(
-                width: 90,
-                child: Text(
-                  dep.name,
-                  style: theme.textTheme.bodyLarge
-                      ?.copyWith(fontWeight: FontWeight.w600),
-                ),
-              ),
-              Expanded(
-                child: Text(
-                  ok ? dep.version ?? 'installed' : 'missing',
-                  style: theme.textTheme.bodyMedium,
-                ),
-              ),
-            ],
-          ),
-          if (!ok && dep.installInstructions != null)
-            Padding(
-              padding: const EdgeInsets.only(left: 30),
-              child: Text(
-                dep.installInstructions!,
-                style: theme.textTheme.bodySmall
-                    ?.copyWith(color: theme.colorScheme.onSurfaceVariant),
-              ),
-            ),
-        ],
-      ),
     );
   }
 }
