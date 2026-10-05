@@ -17,29 +17,40 @@ formats, and downloads the best video stream plus your preferred audio track
 - Merged output verified with `ffprobe` (streams present, language matches,
   resolution within the requested cap).
 - Queue with concurrency limit, per-task progress, retry and cancellation.
-- Missing-dependency banner with install instructions.
+- Included media tools with verified updates and recovery in Advanced settings.
 - App settings persisted with `shared_preferences`.
 
 ## Requirements
 
-- Linux with a GTK desktop environment
-- [yt-dlp](https://github.com/yt-dlp/yt-dlp#installation)
-  (e.g. `pipx install yt-dlp`)
-- [ffmpeg / ffprobe](https://ffmpeg.org/) (e.g. `sudo apt install ffmpeg`)
-- Flutter SDK 3.x to build from source
+- Linux x86_64 with a GTK 3 desktop environment and EGL graphics libraries;
+  tested on Ubuntu 24.04.
+- The packaged app includes yt-dlp, FFmpeg, FFprobe, and Deno. No separate media
+  tool or Python installation is required.
+- Building from source requires Flutter with Dart 3.12.2 or newer, the Flutter
+  Linux build prerequisites, Python 3.11 or newer, and internet access for the
+  first tool download. Python is used only during packaging.
+
+Extract `universal-downloader-linux-x64.tar.gz` and run
+`universal-downloader/universal_downloader`. Keep the complete extracted folder
+together, including `lib/`, `data/`, and `tools/`.
 
 ## Build
 
 ```sh
 flutter pub get
-flutter build linux --release
+python3 tool/build_linux.py
 ```
 
-The bundle is written to `build/linux/x64/release/bundle/`. Run it with:
+This downloads pinned tools, verifies their checksums, and creates the app
+archive and tool update assets in `dist/`. The unpacked bundle is written to
+`build/linux/x64/release/bundle/`. Run it with:
 
 ```sh
 ./build/linux/x64/release/bundle/universal_downloader
 ```
+
+See [packaging and update instructions](tool/README.md) for version pins,
+clean-environment checks, release assets, and redistribution requirements.
 
 ## How to Use
 
@@ -138,11 +149,16 @@ In **Settings**, configure the default folder, video quality, and preferred
 audio language (`ar` for Arabic or `en` for English). Keep **Automatic downloads**
 off when you want to review the formats before each download.
 
-![Settings screen with dependency status and default download preferences](docs/screenshots/settings.png)
+Tool versions and paths are under **Settings → Advanced → Diagnostics**.
+**Update tools** checks this project's published releases and verifies the
+download before activating it. Failed updates keep the current tools.
+**Use included tools** restores the tools shipped with the app and clears custom
+executable overrides. Finish or cancel queued downloads before changing tools.
 
-If a missing-dependency banner appears, install `yt-dlp`, `ffmpeg`, and `ffprobe`
-as described in Requirements. For tools installed outside your `PATH`, enter
-their executable paths in **Settings**, then click **Check again**.
+If a component is unavailable, use Diagnostics to restore the included tools
+or extract the complete app package again. Advanced settings still allow custom
+yt-dlp, FFmpeg, and FFprobe paths. Source builds without a prepared bundle can
+use tools on `PATH`; release builds require the included runtime.
 
 ## Test
 
@@ -170,6 +186,7 @@ lib/
 │   ├── models/       MediaInfo, VideoFormat, AudioFormat, DownloadOptions
 │   ├── process/      ProcessRunner (argv based, no shell), CancelToken, progress parser
 │   ├── services/     DependencyChecker, LogService, MediaAssembler (merge + verify)
+│   ├── tools/        bundled paths, verified update installation, release checks
 │   └── utils/        filename sanitization, path helpers, format helpers
 ├── providers/        provider interface + registry + format selection
 │   ├── youtube/      YouTube provider, yt-dlp extractor, JSON → models mapper
