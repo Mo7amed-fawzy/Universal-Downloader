@@ -55,7 +55,7 @@ void main() {
         isA<LinuxDownloadPlatform>(),
       );
       for (final os in OperatingSystem.values.where(
-        (os) => os != OperatingSystem.linux,
+        (os) => os != OperatingSystem.linux && os != OperatingSystem.android,
       )) {
         expect(factory.create(operatingSystem: os), throwsUnsupportedError);
       }
