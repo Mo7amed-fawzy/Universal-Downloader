@@ -1,6 +1,6 @@
 # Universal Downloader
 
-A generic media downloader for Linux desktop, built with Flutter (Material 3).
+A Flutter (Material 3) media downloader for Linux desktop and an Android preview.
 
 Paste a URL and the app detects the provider, lists the real available
 formats, and downloads the best video stream plus your preferred audio track
@@ -51,6 +51,54 @@ archive and tool update assets in `dist/`. The unpacked bundle is written to
 
 See [packaging and update instructions](tool/README.md) for version pins,
 clean-environment checks, release assets, and redistribution requirements.
+
+## Android Preview
+
+Android 10 (API 29) or newer is required. The APK includes yt-dlp, Python,
+QuickJS, FFmpeg, and FFprobe. Users install only the APK; tools and JavaScript
+solver files are unpacked from the app without downloading runtimes on the
+phone. Tools update with a new APK, and desktop executable overrides are hidden.
+
+```sh
+flutter build apk --release --split-per-abi --target-platform android-arm64,android-x64
+```
+
+The ARM64 phone APK is `build/app/outputs/flutter-apk/app-arm64-v8a-release.apk`;
+the x86_64 emulator APK is beside it. These preview builds use the template's
+debug signing key. The first developer build downloads Maven dependencies and
+pinned yt-dlp, verifies the extractor SHA-256 from `tool/android_tools.json`, and
+embeds it as an Android resource. A normal rebuild can reuse the build cache.
+
+For one APK containing all targeted architectures, run `flutter build apk
+--release`; the output is `build/app/outputs/flutter-apk/app-release.apk`.
+Release validation must include first startup on a clean app installation,
+as well as an upgrade: an existing unpacked runtime can hide extraction bugs.
+The app's ProGuard rules preserve the ZIP extra-field constructors that Apache
+Commons Compress invokes reflectively while unpacking the included tools.
+
+Downloads and merges use app-private storage. Verified video and subtitle files
+are published through MediaStore into a new folder under
+`Downloads/UniversalDownloader`, preserving matching video/subtitle basenames.
+The Open video action delegates to an installed video player. No broad storage
+permission is required. Small screens use bottom navigation.
+
+Keep the app open while downloading in this preview. Foreground notifications,
+recovery after process death, sharing, and persistent queue history are not yet
+implemented. Release startup was verified on a Realme C53 with Android 14;
+full runtime/merge/publication tests used an Android 13 x86_64 emulator.
+Full ARM64 download testing and 16 KB page-size validation remain release checks.
+
+To run the native tool/merge/publication/cancellation smoke test on an emulator:
+
+```sh
+flutter run -d emulator-5554 -t tool/android_smoke.dart
+flutter run -d emulator-5554 -t tool/android_smoke.dart --dart-define=ANDROID_LIVE_TEST=true
+```
+
+The second command also extracts multilingual YouTube metadata and downloads a
+short live video. Results are logged with `ANDROID_SMOKE_RESULT` and saved under
+the app's private `files/universal_downloader/smoke-result.json`. This is a test
+entrypoint; normal APK builds use `lib/main.dart`.
 
 ## How to Use
 
@@ -184,17 +232,49 @@ lib/
 ├── core/
 │   ├── errors/       typed exceptions
 │   ├── models/       MediaInfo, VideoFormat, AudioFormat, DownloadOptions
-│   ├── process/      ProcessRunner (argv based, no shell), CancelToken, progress parser
+│   ├── process/      CommandRunner contract, ProcessRunner, cancellation, progress parser
 │   ├── services/     DependencyChecker, LogService, MediaAssembler (merge + verify)
 │   ├── tools/        bundled paths, verified update installation, release checks
 │   └── utils/        filename sanitization, path helpers, format helpers
-├── providers/        provider interface + registry + format selection
+├── platform/         OS detection + DownloadPlatform contract
+│   ├── linux/        Linux tools, paths, updates, publication, file opening
+│   └── android/      native command bridge, private paths, MediaStore publication
+├── providers/        provider contracts + factories + registry + format selection
+│   ├── factories/    construct providers using the selected platform services
 │   ├── youtube/      YouTube provider, yt-dlp extractor, JSON → models mapper
 │   └── direct/       direct media URL provider
 ├── downloads/        task queue, state machine, repository (temp/output naming)
 ├── settings/         app settings + persistence
 └── ui/               pages and widgets (home, downloads, settings)
 ```
+
+Operating-system services and website providers vary independently. At startup,
+`DownloadPlatformFactory` detects the OS and supplies a `DownloadPlatform`.
+`AppController` passes its command runner, directories, and resolved tools to
+provider factories through `ProviderDependencies`. The controller and queue
+work with `DownloaderProvider`; they do not select concrete website classes.
+
+To add a website, implement `DownloaderProvider` in `lib/providers/<site>/`,
+implement its `ProviderFactory`, and register the factory in
+`default_provider_factories.dart`. Tool-based providers can implement
+`ToolConfigurableProvider` to receive updated executable paths and arguments.
+Use a stable, unique provider ID; registration order determines URL precedence.
+Factories can supply a different implementation where a platform requires one,
+while shared provider logic continues to use `CommandRunner`.
+
+To add an OS, implement `DownloadPlatform` in `lib/platform/<os>/` and register
+it in `DownloadPlatformFactory`. That implementation owns command execution,
+paths, tool checks/updates, final publication, and opening completed downloads.
+The queue waits for publication before marking a task complete; the returned
+location can be a filesystem path or a content URI. A publisher must honor its
+cancellation token before committing a file and clean up partial publication
+on failure. Linux publication returns the provider's already verified file.
+
+Linux and the Android preview implement this contract. The Android factory
+initializes bundled native tools asynchronously before constructing providers.
+Completed results carry subtitle sidecar files so Android publishes the entire
+selected output. Other operating systems remain unsupported, and the existing
+Facebook/Instagram/TikTok/X classes remain unregistered stubs.
 
 Download steps for a two-stream (video-only + audio-only) YouTube task:
 
