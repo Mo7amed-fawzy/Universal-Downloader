@@ -15,12 +15,15 @@ class ToolDiagnostics extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final android = Theme.of(context).platform == TargetPlatform.android;
     final busy = controller.updatingTools || controller.checkingDependencies;
     return ExpansionTile(
       title: const Text('Diagnostics'),
       children: [
-        const Text(
-          'Media tools are included with the app. Updates are verified before installation.',
+        Text(
+          android
+              ? 'All tools are included. Install a newer APK to update them.'
+              : 'Media tools are included with the app. Updates are verified before installation.',
         ),
         for (final status in controller.dependencies)
           ToolDiagnosticRow(status: status),
@@ -33,20 +36,22 @@ class ToolDiagnostics extends StatelessWidget {
               icon: const Icon(Icons.refresh),
               label: const Text('Check tools'),
             ),
-            FilledButton.icon(
-              onPressed: busy ? null : () => controller.updateTools(),
-              icon: const Icon(Icons.system_update_alt),
-              label: Text(
-                controller.updatingTools ? 'Updating…' : 'Update tools',
+            if (!android)
+              FilledButton.icon(
+                onPressed: busy ? null : () => controller.updateTools(),
+                icon: const Icon(Icons.system_update_alt),
+                label: Text(
+                  controller.updatingTools ? 'Updating…' : 'Update tools',
+                ),
               ),
-            ),
-            TextButton(
-              onPressed: busy
-                  ? null
-                  : onRestoreIncluded ??
-                        () => controller.updateTools(restoreIncluded: true),
-              child: const Text('Use included tools'),
-            ),
+            if (!android)
+              TextButton(
+                onPressed: busy
+                    ? null
+                    : onRestoreIncluded ??
+                          () => controller.updateTools(restoreIncluded: true),
+                child: const Text('Use included tools'),
+              ),
           ],
         ),
         if (controller.updatingTools)

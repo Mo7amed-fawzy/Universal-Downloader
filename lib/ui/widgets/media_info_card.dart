@@ -90,10 +90,11 @@ class _Thumbnail extends StatelessWidget {
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
     final uri = info.thumbnail;
+    final compact = MediaQuery.sizeOf(context).width < 600;
     if (uri == null) {
       return Container(
-        width: 220,
-        height: 124,
+        width: compact ? 88 : 220,
+        height: compact ? 50 : 124,
         color: theme.colorScheme.surfaceContainerHighest,
         child: Icon(
           Icons.movie_outlined,
@@ -103,8 +104,8 @@ class _Thumbnail extends StatelessWidget {
       );
     }
     return SizedBox(
-      width: 220,
-      height: 124,
+      width: compact ? 88 : 220,
+      height: compact ? 50 : 124,
       child: Image.network(
         uri.toString(),
         fit: BoxFit.cover,

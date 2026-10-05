@@ -24,6 +24,17 @@ class OutputFolderRow extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
+    if (theme.platform == TargetPlatform.android) {
+      return const Card(
+        child: ListTile(
+          leading: Icon(Icons.folder_outlined),
+          title: Text('Downloads / UniversalDownloader'),
+          subtitle: Text(
+            'Video and subtitles are saved together in a new folder.',
+          ),
+        ),
+      );
+    }
     return Card(
       child: Padding(
         padding: const EdgeInsets.all(16),

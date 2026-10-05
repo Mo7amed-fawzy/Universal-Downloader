@@ -32,9 +32,15 @@ class _SettingsPageState extends State<SettingsPage> {
   void initState() {
     super.initState();
     _draft = context.read<AppController>().settings;
-    _dirController = TextEditingController(text: _draft.defaultDownloadDirectory);
-    _preferredLangController = TextEditingController(text: _draft.preferredLanguage);
-    _fallbackLangController = TextEditingController(text: _draft.fallbackLanguage);
+    _dirController = TextEditingController(
+      text: _draft.defaultDownloadDirectory,
+    );
+    _preferredLangController = TextEditingController(
+      text: _draft.preferredLanguage,
+    );
+    _fallbackLangController = TextEditingController(
+      text: _draft.fallbackLanguage,
+    );
     _ytDlpPathController = TextEditingController(text: _draft.ytDlpPath);
     _ffmpegPathController = TextEditingController(text: _draft.ffmpegPath);
     _ffprobePathController = TextEditingController(text: _draft.ffprobePath);
@@ -59,15 +65,17 @@ class _SettingsPageState extends State<SettingsPage> {
   }
 
   Future<void> _saveTextFields() async {
-    await _save(_draft.copyWith(
-      defaultDownloadDirectory: _dirController.text.trim(),
-      preferredLanguage: _preferredLangController.text.trim(),
-      fallbackLanguage: _fallbackLangController.text.trim(),
-      ytDlpPath: _ytDlpPathController.text.trim(),
-      ffmpegPath: _ffmpegPathController.text.trim(),
-      ffprobePath: _ffprobePathController.text.trim(),
-      extraYtDlpArgs: _extraArgsController.text.trim(),
-    ));
+    await _save(
+      _draft.copyWith(
+        defaultDownloadDirectory: _dirController.text.trim(),
+        preferredLanguage: _preferredLangController.text.trim(),
+        fallbackLanguage: _fallbackLangController.text.trim(),
+        ytDlpPath: _ytDlpPathController.text.trim(),
+        ffmpegPath: _ffmpegPathController.text.trim(),
+        ffprobePath: _ffprobePathController.text.trim(),
+        extraYtDlpArgs: _extraArgsController.text.trim(),
+      ),
+    );
   }
 
   Future<void> _restoreIncludedTools() async {
@@ -96,6 +104,7 @@ class _SettingsPageState extends State<SettingsPage> {
   @override
   Widget build(BuildContext context) {
     final controller = context.watch<AppController>();
+    final android = Theme.of(context).platform == TargetPlatform.android;
 
     return AppScaffold(
       selectedIndex: 2,
@@ -107,35 +116,41 @@ class _SettingsPageState extends State<SettingsPage> {
           _SectionCard(
             title: 'General',
             children: [
-              Row(
-                children: [
-                  Expanded(
-                    child: _TextField(
-                      controller: _dirController,
-                      label: 'Default download directory',
-                      hint: 'e.g. ~/Videos',
-                      onSaved: _saveTextFields,
+              if (android)
+                const ListTile(
+                  title: Text('Save to Downloads'),
+                  subtitle: Text('Files are saved under UniversalDownloader.'),
+                )
+              else ...[
+                Row(
+                  children: [
+                    Expanded(
+                      child: _TextField(
+                        controller: _dirController,
+                        label: 'Default download directory',
+                        hint: 'e.g. ~/Videos',
+                        onSaved: _saveTextFields,
+                      ),
                     ),
-                  ),
-                  const SizedBox(width: 8),
-                  OutlinedButton(
-                    onPressed: _pickDefaultDir,
-                    child: const Text('Choose'),
-                  ),
-                ],
-              ),
-              const SizedBox(height: 8),
-              SwitchListTile(
-                contentPadding: EdgeInsets.zero,
-                title: const Text('Remember last directory'),
-                subtitle: const Text(
-                  'Keep using the last folder you chose per session.',
+                    const SizedBox(width: 8),
+                    OutlinedButton(
+                      onPressed: _pickDefaultDir,
+                      child: const Text('Choose'),
+                    ),
+                  ],
                 ),
-                value: _draft.rememberLastDirectory,
-                onChanged: (v) => _save(
-                  _draft.copyWith(rememberLastDirectory: v),
+                const SizedBox(height: 8),
+                SwitchListTile(
+                  contentPadding: EdgeInsets.zero,
+                  title: const Text('Remember last directory'),
+                  subtitle: const Text(
+                    'Keep using the last folder you chose per session.',
+                  ),
+                  value: _draft.rememberLastDirectory,
+                  onChanged: (v) =>
+                      _save(_draft.copyWith(rememberLastDirectory: v)),
                 ),
-              ),
+              ],
               SwitchListTile(
                 contentPadding: EdgeInsets.zero,
                 title: const Text('Automatic downloads'),
@@ -143,8 +158,7 @@ class _SettingsPageState extends State<SettingsPage> {
                   'Start downloading immediately after fetching media info.',
                 ),
                 value: _draft.autoStartDownload,
-                onChanged: (v) =>
-                    _save(_draft.copyWith(autoStartDownload: v)),
+                onChanged: (v) => _save(_draft.copyWith(autoStartDownload: v)),
               ),
             ],
           ),
@@ -154,9 +168,7 @@ class _SettingsPageState extends State<SettingsPage> {
             children: [
               DropdownButtonFormField<VideoQuality>(
                 initialValue: _draft.defaultVideoQuality,
-                decoration: const InputDecoration(
-                  labelText: 'Default quality',
-                ),
+                decoration: const InputDecoration(labelText: 'Default quality'),
                 items: VideoQuality.values
                     .map(
                       (q) => DropdownMenuItem(
@@ -183,10 +195,7 @@ class _SettingsPageState extends State<SettingsPage> {
                 ),
                 items: ContainerPreference.values
                     .map(
-                      (c) => DropdownMenuItem(
-                        value: c,
-                        child: Text(c.label),
-                      ),
+                      (c) => DropdownMenuItem(value: c, child: Text(c.label)),
                     )
                     .toList(),
                 onChanged: (v) {
@@ -210,7 +219,9 @@ class _SettingsPageState extends State<SettingsPage> {
               const SizedBox(height: 8),
               SwitchListTile(
                 contentPadding: EdgeInsets.zero,
-                title: const Text('Auto-select best audio in preferred language'),
+                title: const Text(
+                  'Auto-select best audio in preferred language',
+                ),
                 subtitle: const Text(
                   'Automatically pick the highest quality track, e.g. best '
                   'Arabic audio.',
@@ -235,30 +246,32 @@ class _SettingsPageState extends State<SettingsPage> {
                 onRestoreIncluded: _restoreIncludedTools,
               ),
               const SizedBox(height: 12),
-              _PathField(
-                controller: _ytDlpPathController,
-                label: 'yt-dlp executable path',
-                onSaved: _saveTextFields,
-              ),
-              const SizedBox(height: 12),
-              _PathField(
-                controller: _ffmpegPathController,
-                label: 'FFmpeg executable path',
-                onSaved: _saveTextFields,
-              ),
-              const SizedBox(height: 12),
-              _PathField(
-                controller: _ffprobePathController,
-                label: 'FFprobe executable path',
-                onSaved: _saveTextFields,
-              ),
-              const SizedBox(height: 12),
-              _TextField(
-                controller: _extraArgsController,
-                label: 'Additional yt-dlp arguments',
-                hint: 'e.g. --proxy socks5://127.0.0.1:9050',
-                onSaved: _saveTextFields,
-              ),
+              if (!android) ...[
+                _PathField(
+                  controller: _ytDlpPathController,
+                  label: 'yt-dlp executable path',
+                  onSaved: _saveTextFields,
+                ),
+                const SizedBox(height: 12),
+                _PathField(
+                  controller: _ffmpegPathController,
+                  label: 'FFmpeg executable path',
+                  onSaved: _saveTextFields,
+                ),
+                const SizedBox(height: 12),
+                _PathField(
+                  controller: _ffprobePathController,
+                  label: 'FFprobe executable path',
+                  onSaved: _saveTextFields,
+                ),
+                const SizedBox(height: 12),
+                _TextField(
+                  controller: _extraArgsController,
+                  label: 'Additional yt-dlp arguments',
+                  hint: 'e.g. --proxy socks5://127.0.0.1:9050',
+                  onSaved: _saveTextFields,
+                ),
+              ],
               const SizedBox(height: 8),
               SwitchListTile(
                 contentPadding: EdgeInsets.zero,

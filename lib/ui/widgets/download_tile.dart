@@ -32,8 +32,10 @@ class DownloadTile extends StatelessWidget {
         child: Row(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            _Thumbnail(task: task),
-            const SizedBox(width: 16),
+            if (MediaQuery.sizeOf(context).width >= 600) ...[
+              _Thumbnail(task: task),
+              const SizedBox(width: 16),
+            ],
             Expanded(
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
@@ -126,7 +128,8 @@ class _StateArea extends StatelessWidget {
     final stats = [
       if (progress.downloadedBytes != null)
         FormatUtils.bytes(progress.downloadedBytes),
-      if (progress.totalBytes != null) 'of ${FormatUtils.bytes(progress.totalBytes)}',
+      if (progress.totalBytes != null)
+        'of ${FormatUtils.bytes(progress.totalBytes)}',
       if (percent != null) '${percent.toStringAsFixed(0)}%',
       if (progress.speedBytesPerSecond != null)
         FormatUtils.bytesPerSecond(progress.speedBytesPerSecond),
@@ -136,12 +139,14 @@ class _StateArea extends StatelessWidget {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        Row(
+        Wrap(
+          spacing: 8,
           children: [
             Text(
               task.state.label,
-              style: theme.textTheme.bodyMedium
-                  ?.copyWith(fontWeight: FontWeight.w600),
+              style: theme.textTheme.bodyMedium?.copyWith(
+                fontWeight: FontWeight.w600,
+              ),
             ),
             const SizedBox(width: 8),
             if (task.state == DownloadTaskState.merging ||
@@ -181,8 +186,9 @@ class _StateArea extends StatelessWidget {
             const SizedBox(width: 8),
             Text(
               'Completed',
-              style: theme.textTheme.bodyMedium
-                  ?.copyWith(fontWeight: FontWeight.w600),
+              style: theme.textTheme.bodyMedium?.copyWith(
+                fontWeight: FontWeight.w600,
+              ),
             ),
           ],
         ),
@@ -212,8 +218,9 @@ class _StateArea extends StatelessWidget {
             Expanded(
               child: Text(
                 error?.message ?? 'Failed',
-                style: theme.textTheme.bodyMedium
-                    ?.copyWith(color: theme.colorScheme.error),
+                style: theme.textTheme.bodyMedium?.copyWith(
+                  color: theme.colorScheme.error,
+                ),
               ),
             ),
           ],
@@ -254,42 +261,57 @@ class _Actions extends StatelessWidget {
     final buttons = <Widget>[];
     switch (state) {
       case DownloadTaskState.completed:
-        buttons.add(DownloadLocationButton(outputPath: task.outputPath));
-        buttons.add(IconButton(
-          tooltip: 'Remove',
-          icon: const Icon(Icons.delete_outline),
-          onPressed: () =>
-              context.read<AppController>().manager.remove(task.id),
-        ));
-      case DownloadTaskState.failed:
-        buttons.add(IconButton(
-          tooltip: 'View details',
-          icon: const Icon(Icons.article_outlined),
-          onPressed: () => showErrorDialog(
-            context,
-            message: task.error?.message ?? 'Failed',
-            details: task.technicalDetails,
+        buttons.add(
+          DownloadLocationButton(
+            outputPath: task.outputPath,
+            openDownload: context.read<AppController>().openDownload,
           ),
-        ));
-        buttons.add(IconButton(
-          tooltip: 'Retry',
-          icon: const Icon(Icons.refresh),
-          onPressed: () =>
-              context.read<AppController>().manager.retry(task.id),
-        ));
-        buttons.add(IconButton(
-          tooltip: 'Remove',
-          icon: const Icon(Icons.delete_outline),
-          onPressed: () =>
-              context.read<AppController>().manager.remove(task.id),
-        ));
+        );
+        buttons.add(
+          IconButton(
+            tooltip: 'Remove',
+            icon: const Icon(Icons.delete_outline),
+            onPressed: () =>
+                context.read<AppController>().manager.remove(task.id),
+          ),
+        );
+      case DownloadTaskState.failed:
+        buttons.add(
+          IconButton(
+            tooltip: 'View details',
+            icon: const Icon(Icons.article_outlined),
+            onPressed: () => showErrorDialog(
+              context,
+              message: task.error?.message ?? 'Failed',
+              details: task.technicalDetails,
+            ),
+          ),
+        );
+        buttons.add(
+          IconButton(
+            tooltip: 'Retry',
+            icon: const Icon(Icons.refresh),
+            onPressed: () =>
+                context.read<AppController>().manager.retry(task.id),
+          ),
+        );
+        buttons.add(
+          IconButton(
+            tooltip: 'Remove',
+            icon: const Icon(Icons.delete_outline),
+            onPressed: () =>
+                context.read<AppController>().manager.remove(task.id),
+          ),
+        );
       case DownloadTaskState.cancelled:
-        buttons.add(IconButton(
-          tooltip: 'Remove',
-          icon: const Icon(Icons.delete_outline),
-          onPressed: () =>
-              context.read<AppController>().manager.remove(task.id),
-        ));
+        buttons.add(
+          IconButton(
+            tooltip: 'Remove',
+            icon: const Icon(Icons.delete_outline),
+            onPressed: () =>
+                context.read<AppController>().manager.remove(task.id),
+          ),
+        );
       default:
         break;
     }

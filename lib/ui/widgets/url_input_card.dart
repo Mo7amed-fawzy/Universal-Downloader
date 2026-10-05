@@ -33,26 +33,23 @@ class UrlInputCard extends StatelessWidget {
           children: [
             Text('Paste a URL to download', style: theme.textTheme.titleMedium),
             const SizedBox(height: 12),
-            Row(
-              children: [
-                Expanded(
-                  child: TextField(
-                    controller: controller,
-                    focusNode: focusNode,
-                    onSubmitted: (_) => onFetch(),
-                    decoration: InputDecoration(
-                      hintText: 'https://www.youtube.com/watch?v=...',
-                      prefixIcon: const Icon(Icons.link),
-                      suffixIcon: IconButton(
-                        tooltip: 'Paste from clipboard',
-                        icon: const Icon(Icons.content_paste),
-                        onPressed: _pasteFromClipboard,
-                      ),
+            LayoutBuilder(
+              builder: (context, constraints) {
+                final field = TextField(
+                  controller: controller,
+                  focusNode: focusNode,
+                  onSubmitted: (_) => onFetch(),
+                  decoration: InputDecoration(
+                    hintText: 'https://www.youtube.com/watch?v=...',
+                    prefixIcon: const Icon(Icons.link),
+                    suffixIcon: IconButton(
+                      tooltip: 'Paste from clipboard',
+                      icon: const Icon(Icons.content_paste),
+                      onPressed: _pasteFromClipboard,
                     ),
                   ),
-                ),
-                const SizedBox(width: 12),
-                FilledButton.icon(
+                );
+                final button = FilledButton.icon(
                   onPressed: fetching ? null : onFetch,
                   icon: fetching
                       ? const SizedBox(
@@ -62,18 +59,26 @@ class UrlInputCard extends StatelessWidget {
                         )
                       : const Icon(Icons.search),
                   label: Text(fetching ? 'Fetching...' : 'Fetch Info'),
-                ),
-              ],
+                );
+                return constraints.maxWidth < 500
+                    ? Column(
+                        crossAxisAlignment: CrossAxisAlignment.stretch,
+                        children: [field, const SizedBox(height: 12), button],
+                      )
+                    : Row(
+                        children: [
+                          Expanded(child: field),
+                          const SizedBox(width: 12),
+                          button,
+                        ],
+                      );
+              },
             ),
             const SizedBox(height: 12),
             if (provider != null && errorMessage == null)
               Row(
                 children: [
-                  Icon(
-                    Icons.check_circle,
-                    size: 18,
-                    color: Colors.green,
-                  ),
+                  Icon(Icons.check_circle, size: 18, color: Colors.green),
                   const SizedBox(width: 8),
                   Text(
                     'Provider: ${provider!.displayName}',
@@ -93,8 +98,9 @@ class UrlInputCard extends StatelessWidget {
                   Expanded(
                     child: Text(
                       errorMessage!,
-                      style: theme.textTheme.bodyMedium
-                          ?.copyWith(color: theme.colorScheme.error),
+                      style: theme.textTheme.bodyMedium?.copyWith(
+                        color: theme.colorScheme.error,
+                      ),
                     ),
                   ),
                 ],

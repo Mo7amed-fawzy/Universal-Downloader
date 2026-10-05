@@ -10,6 +10,27 @@ import 'package:universal_downloader/core/services/file_location_service.dart';
 import 'package:universal_downloader/ui/widgets/download_location_button.dart';
 
 void main() {
+
+  testWidgets('Android opens the saved content URI', (tester) async {
+    String? opened;
+    await tester.pumpWidget(
+      MaterialApp(
+        theme: ThemeData(platform: TargetPlatform.android),
+        home: Scaffold(
+          body: DownloadLocationButton(
+            outputPath: 'content://media/downloads/42',
+            openDownload: (uri) async {
+              opened = uri;
+            },
+          ),
+        ),
+      ),
+    );
+    await tester.tap(find.byTooltip('Open video'));
+    await tester.pumpAndSettle();
+    expect(opened, 'content://media/downloads/42');
+  });
+
   testWidgets('Open location selects the exact downloaded file', (
     tester,
   ) async {
@@ -17,6 +38,7 @@ void main() {
     final runner = LocationRunner();
     await tester.pumpWidget(
       MaterialApp(
+        theme: ThemeData(platform: TargetPlatform.linux),
         home: Scaffold(
           body: DownloadLocationButton(
             outputPath: path,
@@ -59,6 +81,7 @@ void main() {
   ) async {
     await tester.pumpWidget(
       MaterialApp(
+        theme: ThemeData(platform: TargetPlatform.linux),
         home: Scaffold(
           body: DownloadLocationButton(
             outputPath: '/tmp/Video.mp4',
@@ -77,8 +100,9 @@ void main() {
 
   testWidgets('disables Open location without an output file', (tester) async {
     await tester.pumpWidget(
-      const MaterialApp(
-        home: Scaffold(body: DownloadLocationButton(outputPath: null)),
+      MaterialApp(
+        theme: ThemeData(platform: TargetPlatform.linux),
+        home: const Scaffold(body: DownloadLocationButton(outputPath: null)),
       ),
     );
     expect(

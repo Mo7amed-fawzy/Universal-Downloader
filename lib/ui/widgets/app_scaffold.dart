@@ -3,6 +3,7 @@ import 'package:provider/provider.dart';
 
 import '../../app/app_controller.dart';
 import '../../app/routes.dart';
+import 'app_bottom_navigation.dart';
 
 /// Shared desktop scaffold: top bar + navigation rail + body.
 class AppScaffold extends StatelessWidget {
@@ -19,41 +20,58 @@ class AppScaffold extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final compact = MediaQuery.sizeOf(context).width < 600;
     return Scaffold(
       appBar: AppBar(
-        title: const Text('Universal Downloader'),
+        title: const Text(
+          'Universal Downloader',
+          maxLines: 1,
+          overflow: TextOverflow.ellipsis,
+        ),
         actions: [_ThemeToggle(), _SettingsButton()],
       ),
-      body: Row(
-        children: [
-          NavigationRail(
-            selectedIndex: selectedIndex,
-            labelType: NavigationRailLabelType.all,
-            destinations: const [
-              NavigationRailDestination(
-                icon: Icon(Icons.home_outlined),
-                selectedIcon: Icon(Icons.home),
-                label: Text('Home'),
-              ),
-              NavigationRailDestination(
-                icon: Icon(Icons.download_outlined),
-                selectedIcon: Icon(Icons.download),
-                label: Text('Downloads'),
-              ),
-              NavigationRailDestination(
-                icon: Icon(Icons.settings_outlined),
-                selectedIcon: Icon(Icons.settings),
-                label: Text('Settings'),
-              ),
-            ],
-            onDestinationSelected: (index) =>
-                _navigate(context, index),
-          ),
-          const VerticalDivider(width: 1),
-          Expanded(child: body),
-        ],
-      ),
-      bottomNavigationBar: bottomBar,
+      body: compact
+          ? SafeArea(child: body)
+          : Row(
+              children: [
+                NavigationRail(
+                  selectedIndex: selectedIndex,
+                  labelType: NavigationRailLabelType.all,
+                  destinations: const [
+                    NavigationRailDestination(
+                      icon: Icon(Icons.home_outlined),
+                      selectedIcon: Icon(Icons.home),
+                      label: Text('Home'),
+                    ),
+                    NavigationRailDestination(
+                      icon: Icon(Icons.download_outlined),
+                      selectedIcon: Icon(Icons.download),
+                      label: Text('Downloads'),
+                    ),
+                    NavigationRailDestination(
+                      icon: Icon(Icons.settings_outlined),
+                      selectedIcon: Icon(Icons.settings),
+                      label: Text('Settings'),
+                    ),
+                  ],
+                  onDestinationSelected: (index) => _navigate(context, index),
+                ),
+                const VerticalDivider(width: 1),
+                Expanded(child: body),
+              ],
+            ),
+      bottomNavigationBar: compact
+          ? Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                ?bottomBar,
+                AppBottomNavigation(
+                  selectedIndex: selectedIndex,
+                  onSelected: (index) => _navigate(context, index),
+                ),
+              ],
+            )
+          : bottomBar,
     );
   }
 
@@ -77,16 +95,15 @@ class _ThemeToggle extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final controller = context.watch<AppController>();
-    final isDark = controller.themeMode == ThemeMode.dark ||
+    final isDark =
+        controller.themeMode == ThemeMode.dark ||
         (controller.themeMode == ThemeMode.system &&
             Theme.of(context).brightness == Brightness.dark);
     return IconButton(
       tooltip: isDark ? 'Switch to light theme' : 'Switch to dark theme',
       icon: Icon(isDark ? Icons.light_mode_outlined : Icons.dark_mode_outlined),
       onPressed: () {
-        controller.setThemeMode(
-          isDark ? ThemeMode.light : ThemeMode.dark,
-        );
+        controller.setThemeMode(isDark ? ThemeMode.light : ThemeMode.dark);
       },
     );
   }

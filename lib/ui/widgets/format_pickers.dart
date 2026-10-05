@@ -41,6 +41,7 @@ class FormatSelectionCard extends StatelessWidget {
             Text('Video Quality', style: theme.textTheme.titleMedium),
             const SizedBox(height: 8),
             DropdownButtonFormField<VideoQuality>(
+              isExpanded: true,
               initialValue: input.videoQuality,
               items: VideoQuality.values
                   .map(
@@ -61,9 +62,11 @@ class FormatSelectionCard extends StatelessWidget {
               },
             ),
             const Divider(height: 32),
-            Row(
+            Wrap(
+              spacing: 8,
+              runSpacing: 8,
               children: [
-                Expanded(child: Text('Audio', style: theme.textTheme.titleMedium)),
+                Text('Audio', style: theme.textTheme.titleMedium),
                 if (hasAudio)
                   StatusChip(
                     label: preferredHasAudio
@@ -87,6 +90,7 @@ class FormatSelectionCard extends StatelessWidget {
               )
             else ...[
               DropdownButtonFormField<String?>(
+                isExpanded: true,
                 initialValue: input.audioLanguage,
                 decoration: const InputDecoration(labelText: 'Language'),
                 items: [
@@ -144,12 +148,7 @@ class FormatSelectionCard extends StatelessWidget {
             DropdownButtonFormField<ContainerPreference>(
               initialValue: input.containerPreference,
               items: ContainerPreference.values
-                  .map(
-                    (c) => DropdownMenuItem(
-                      value: c,
-                      child: Text(c.label),
-                    ),
-                  )
+                  .map((c) => DropdownMenuItem(value: c, child: Text(c.label)))
                   .toList(),
               onChanged: (v) {
                 if (v == null) return;
@@ -163,8 +162,7 @@ class FormatSelectionCard extends StatelessWidget {
     );
   }
 
-  bool get preferredHasAudio =>
-      info.hasAudioForLanguage(preferredLanguage);
+  bool get preferredHasAudio => info.hasAudioForLanguage(preferredLanguage);
 
   String _languageLabel(String code, ThemeData theme) {
     final base = code.split('-').first.toLowerCase();
@@ -194,12 +192,9 @@ class _AudioBitrateDropdown extends StatelessWidget {
     final formats = language == null
         ? const <AudioFormat>[]
         : selector.audioForLanguage(info.audioFormats, language!);
-    final bitrates = formats
-        .map((f) => f.bitrate)
-        .whereType<int>()
-        .toSet()
-        .toList()
-      ..sort((a, b) => b.compareTo(a));
+    final bitrates =
+        formats.map((f) => f.bitrate).whereType<int>().toSet().toList()
+          ..sort((a, b) => b.compareTo(a));
 
     if (bitrates.isEmpty) return const SizedBox.shrink();
 
@@ -212,10 +207,7 @@ class _AudioBitrateDropdown extends StatelessWidget {
           child: Text('Best Available'),
         ),
         for (final bitrate in bitrates)
-          DropdownMenuItem<int?>(
-            value: bitrate,
-            child: Text('$bitrate kbps'),
-          ),
+          DropdownMenuItem<int?>(value: bitrate, child: Text('$bitrate kbps')),
       ],
       onChanged: onChanged,
     );

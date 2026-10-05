@@ -104,7 +104,8 @@ class _HomePageState extends State<HomePage> {
     if (provider == null) {
       setState(() {
         _provider = null;
-        _errorMessage = 'Unsupported website.\n'
+        _errorMessage =
+            'Unsupported website.\n'
             'This website is not supported yet.';
       });
       return;
@@ -124,7 +125,9 @@ class _HomePageState extends State<HomePage> {
       if (!mounted) return;
 
       final settings = controller.settings;
-      final preferred = info.audioFormats.isNotEmpty ? preferredAudioLanguage(info, settings.preferredLanguage) : null;
+      final preferred = info.audioFormats.isNotEmpty
+          ? preferredAudioLanguage(info, settings.preferredLanguage)
+          : null;
 
       setState(() {
         _info = info;
@@ -192,7 +195,9 @@ class _HomePageState extends State<HomePage> {
         audio = _selector.selectBestAudio(
           info.audioFormats,
           preferredLanguage: language,
-          fallbackLanguage: _fallbackOrNull(controller.settings.fallbackLanguage),
+          fallbackLanguage: _fallbackOrNull(
+            controller.settings.fallbackLanguage,
+          ),
         );
       } else {
         audio = _pickBitrate(info, language, _input.audioBitrate);
@@ -204,7 +209,8 @@ class _HomePageState extends State<HomePage> {
             .join(', ');
         await showErrorDialog(
           context,
-          message: 'No ${LanguageNames.nameFor(language)} audio track is '
+          message:
+              'No ${LanguageNames.nameFor(language)} audio track is '
               'available for this video.',
           details: available.isEmpty
               ? null
@@ -213,9 +219,10 @@ class _HomePageState extends State<HomePage> {
         return;
       }
 
-      audioLabel = '${LanguageNames.nameFor(audio.language)}'
-          '${audio.bitrate != null ? ' ${audio.bitrate} kbps' : ''}'
-          .trim();
+      audioLabel =
+          '${LanguageNames.nameFor(audio.language)}'
+                  '${audio.bitrate != null ? ' ${audio.bitrate} kbps' : ''}'
+              .trim();
       audioLanguageCode = language;
     } else {
       audioLabel = 'Embedded audio';
@@ -246,8 +253,10 @@ class _HomePageState extends State<HomePage> {
       containerPreference: _input.containerPreference,
     );
 
-    controller.log.info('Starting download with '
-        'video=${video.formatId} audio=${audio?.formatId ?? 'embedded'}');
+    controller.log.info(
+      'Starting download with '
+      'video=${video.formatId} audio=${audio?.formatId ?? 'embedded'}',
+    );
     controller.manager.add(
       provider: _provider!,
       media: info,
@@ -274,10 +283,9 @@ class _HomePageState extends State<HomePage> {
         }
       }
     }
-    return matches.isEmpty ? null : _selector.selectBestAudio(
-      matches,
-      preferredLanguage: language,
-    );
+    return matches.isEmpty
+        ? null
+        : _selector.selectBestAudio(matches, preferredLanguage: language);
   }
 
   String _videoLabel(VideoFormat video) {
@@ -304,10 +312,8 @@ class _HomePageState extends State<HomePage> {
       selectedIndex: 0,
       body: CallbackShortcuts(
         bindings: {
-          const SingleActivator(
-            LogicalKeyboardKey.enter,
-            control: true,
-          ): () => _handlePrimaryShortcut(),
+          const SingleActivator(LogicalKeyboardKey.enter, control: true): () =>
+              _handlePrimaryShortcut(),
         },
         child: Focus(
           autofocus: true,
@@ -391,8 +397,7 @@ class _HomePageState extends State<HomePage> {
                           const SizedBox(height: 24),
                           Text(
                             'Active downloads',
-                            style:
-                                Theme.of(context).textTheme.titleMedium,
+                            style: Theme.of(context).textTheme.titleMedium,
                           ),
                           const SizedBox(height: 8),
                           for (final task in activeTasks) ...[
@@ -402,8 +407,9 @@ class _HomePageState extends State<HomePage> {
                         ],
                         const SizedBox(height: 16),
                         Text(
-                          'Tip: press Ctrl+Enter to fetch or download. '
-                          'Drag & drop a URL anywhere on this page.',
+                          Theme.of(context).platform == TargetPlatform.android
+                              ? 'Keep the app open while downloading in this preview.'
+                              : 'Tip: press Ctrl+Enter to fetch or download. Drag & drop a URL anywhere on this page.',
                           style: Theme.of(context).textTheme.bodySmall,
                         ),
                       ],

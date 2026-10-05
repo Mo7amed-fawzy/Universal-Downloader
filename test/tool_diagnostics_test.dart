@@ -6,12 +6,33 @@ import 'package:universal_downloader/ui/widgets/advanced_settings_section.dart';
 import 'package:universal_downloader/ui/widgets/tool_diagnostics.dart';
 
 void main() {
+
+  testWidgets('Android explains APK updates and hides executable replacement', (
+    tester,
+  ) async {
+    await tester.pumpWidget(
+      MaterialApp(
+        theme: ThemeData(platform: TargetPlatform.android),
+        home: Scaffold(
+          body: ToolDiagnostics(controller: DiagnosticsController()),
+        ),
+      ),
+    );
+    await tester.tap(find.text('Diagnostics'));
+    await tester.pumpAndSettle();
+    expect(find.text('Update tools'), findsNothing);
+    expect(find.text('Use included tools'), findsNothing);
+    expect(find.textContaining('newer APK'), findsOneWidget);
+    expect(find.text('Check tools'), findsOneWidget);
+  });
+
   testWidgets('tool details are hidden under Advanced then Diagnostics', (
     tester,
   ) async {
     final controller = DiagnosticsController();
     await tester.pumpWidget(
       MaterialApp(
+        theme: ThemeData(platform: TargetPlatform.linux),
         home: Scaffold(
           body: SingleChildScrollView(
             child: AdvancedSettingsSection(
@@ -44,6 +65,7 @@ void main() {
     final controller = DiagnosticsController()..updatingTools = true;
     await tester.pumpWidget(
       MaterialApp(
+        theme: ThemeData(platform: TargetPlatform.linux),
         home: Scaffold(body: ToolDiagnostics(controller: controller)),
       ),
     );
