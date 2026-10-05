@@ -2,6 +2,7 @@ import 'dart:convert';
 
 import '../../core/errors/downloader_exceptions.dart';
 import '../../core/process/cancel_token.dart';
+import '../../core/process/command_runner.dart';
 import '../../core/process/process_runner.dart';
 
 /// Runs yt-dlp to extract structured JSON metadata for a URL.
@@ -12,14 +13,14 @@ import '../../core/process/process_runner.dart';
 class YoutubeExtractor {
   YoutubeExtractor({
     required String ytDlpPath,
-    ProcessRunner? runner,
+    CommandRunner? runner,
     List<String> extraArgs = const [],
   })  : _ytDlpPath = ytDlpPath, // ignore: prefer_initializing_formals
         _runner = runner ?? const ProcessRunner(),
         _extraArgs = extraArgs; // ignore: prefer_initializing_formals
 
   final String _ytDlpPath;
-  final ProcessRunner _runner;
+  final CommandRunner _runner;
   final List<String> _extraArgs;
 
   /// Remote components requested from GitHub for EJS patching.

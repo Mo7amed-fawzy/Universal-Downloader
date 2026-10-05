@@ -1,5 +1,6 @@
 import 'dart:io';
 
+import '../process/command_runner.dart';
 import '../process/process_runner.dart';
 
 /// Status of a single external tool required by the application.
@@ -32,14 +33,14 @@ class DependencyStatus {
 /// Detects and versions the external executables the app depends on.
 class DependencyChecker {
   DependencyChecker({
-    ProcessRunner? runner,
+    CommandRunner? runner,
     this.ytDlpPathOverride,
     this.ffmpegPathOverride,
     this.ffprobePathOverride,
     this.denoPathOverride,
   }) : runner = runner ?? const ProcessRunner();
 
-  final ProcessRunner runner;
+  final CommandRunner runner;
   String? ytDlpPathOverride;
   String? ffmpegPathOverride;
   String? ffprobePathOverride;

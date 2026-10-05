@@ -6,28 +6,39 @@ import '../../core/models/download_options.dart';
 import '../../core/models/media_info.dart';
 import '../../core/models/video_format.dart';
 import '../../core/process/cancel_token.dart';
+import '../../core/process/command_runner.dart';
 import '../../core/process/process_runner.dart';
 import '../../core/services/log_service.dart';
 import '../../core/services/media_assembler.dart';
+import '../../core/tools/media_tools.dart';
 import '../../downloads/download_progress.dart';
 import '../../downloads/download_repository.dart';
 import '../../downloads/download_task_state.dart';
 import '../downloader_provider.dart';
+import '../tool_configurable_provider.dart';
 
 /// Handles direct media URLs (e.g. https://example.com/video.mp4) without a
 /// site-specific extractor, by streaming the file over HTTP.
-class DirectMediaProvider implements DownloaderProvider {
+class DirectMediaProvider
+    implements DownloaderProvider, ToolConfigurableProvider {
   DirectMediaProvider({
     required this.ffprobePath,
-    ProcessRunner? runner,
+    CommandRunner? runner,
     DownloadRepository? repository,
     LogService? log,
-  })  : repository = repository ?? DownloadRepository(),
-        log = log ?? LogService();
+  }) : runner = runner ?? const ProcessRunner(),
+       repository = repository ?? DownloadRepository(),
+       log = log ?? LogService();
 
+  final CommandRunner runner;
   String ffprobePath;
   final DownloadRepository repository;
   final LogService log;
+
+  @override
+  void configureTools(MediaTools tools) {
+    ffprobePath = tools.ffprobe;
+  }
 
   @override
   String get id => 'direct';
@@ -131,12 +142,7 @@ class DirectMediaProvider implements DownloaderProvider {
     try {
       onPhase(DownloadTaskState.downloadingVideo);
       log.info('Downloading direct file from ${media.pageUrl}');
-      await _streamDownload(
-        media.pageUrl,
-        tmpFile,
-        onProgress,
-        cancelToken,
-      );
+      await _streamDownload(media.pageUrl, tmpFile, onProgress, cancelToken);
 
       onPhase(DownloadTaskState.verifying);
       final ext = media.videoFormats.isEmpty
@@ -156,6 +162,7 @@ class DirectMediaProvider implements DownloaderProvider {
       final assembler = MediaAssembler(
         ffmpegPath: '/nonexistent',
         ffprobePath: ffprobePath,
+        runner: runner,
       );
       final report = await assembler.verify(outputFile);
       if (!report.passed) {
@@ -197,8 +204,7 @@ class DirectMediaProvider implements DownloaderProvider {
         );
       }
 
-      final total =
-          response.contentLength > 0 ? response.contentLength : null;
+      final total = response.contentLength > 0 ? response.contentLength : null;
       final sink = output.openWrite();
       var downloaded = 0;
 
@@ -209,8 +215,7 @@ class DirectMediaProvider implements DownloaderProvider {
           downloaded += chunk.length;
           onProgress(
             DownloadProgress(
-              percent:
-                  total == null ? null : (downloaded / total) * 100,
+              percent: total == null ? null : (downloaded / total) * 100,
               downloadedBytes: downloaded,
               totalBytes: total,
             ),
@@ -251,8 +256,9 @@ class DirectMediaProvider implements DownloaderProvider {
   static String? _contentDispositionFilename(String? header) {
     if (header == null) return null;
     // filename="x" or filename*=UTF-8''x
-    final match = RegExp(r"""filename\*?=(?:UTF-8'')?"?([^";]+)""")
-        .firstMatch(header);
+    final match = RegExp(
+      r"""filename\*?=(?:UTF-8'')?"?([^";]+)""",
+    ).firstMatch(header);
     return match?.group(1);
   }
 }

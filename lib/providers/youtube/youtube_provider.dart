@@ -5,33 +5,36 @@ import '../../core/errors/downloader_exceptions.dart';
 import '../../core/models/download_options.dart';
 import '../../core/models/media_info.dart';
 import '../../core/process/cancel_token.dart';
+import '../../core/process/command_runner.dart';
 import '../../core/process/process_runner.dart';
 import '../../core/process/yt_dlp_progress_parser.dart';
 import '../../core/services/log_service.dart';
 import '../../core/services/media_assembler.dart';
+import '../../core/tools/media_tools.dart';
 import '../../downloads/download_repository.dart';
 import '../../downloads/download_task_state.dart';
 import '../downloader_provider.dart';
+import '../tool_configurable_provider.dart';
 import 'youtube_cover_downloader.dart';
 import 'youtube_extractor.dart';
 import 'youtube_format_mapper.dart';
 import 'youtube_subtitle_downloader.dart';
 
 /// YouTube provider backed by yt-dlp.
-class YoutubeProvider implements DownloaderProvider {
+class YoutubeProvider implements DownloaderProvider, ToolConfigurableProvider {
   YoutubeProvider({
     required this.ytDlpPath,
     required this.ffmpegPath,
     required this.ffprobePath,
     this.denoPath,
-    ProcessRunner? runner,
+    CommandRunner? runner,
     DownloadRepository? repository,
     LogService? log,
   }) : _runner = runner ?? const ProcessRunner(),
        _repository = repository ?? DownloadRepository(),
        _log = log ?? LogService();
 
-  final ProcessRunner _runner;
+  final CommandRunner _runner;
   final DownloadRepository _repository;
   final LogService _log;
   String ytDlpPath;
@@ -39,6 +42,16 @@ class YoutubeProvider implements DownloaderProvider {
   String ffprobePath;
   String? denoPath;
   String _extraArgs = '';
+  List<String>? _runtimeArguments;
+
+  @override
+  void configureTools(MediaTools tools) {
+    ytDlpPath = tools.ytDlp;
+    ffmpegPath = tools.ffmpeg;
+    ffprobePath = tools.ffprobe;
+    denoPath = null;
+    _runtimeArguments = tools.ytDlpArguments;
+  }
 
   @override
   String get id => 'youtube';
@@ -50,7 +63,9 @@ class YoutubeProvider implements DownloaderProvider {
   void setExtraYtDlpArgs(String value) => _extraArgs = value;
 
   List<String> get _extraArgList => [
-    if (denoPath != null) ...[
+    if (_runtimeArguments != null)
+      ..._runtimeArguments!
+    else if (denoPath != null) ...[
       '--ignore-config',
       '--no-remote-components',
       '--no-js-runtimes',
@@ -370,6 +385,7 @@ class YoutubeProvider implements DownloaderProvider {
       }
 
       cancelToken.throwIfCancelled();
+      final sidecarFiles = <File>[];
       if (subtitleTmp != null && subtitle != null) {
         final basePath = outputFile.path.substring(
           0,
@@ -383,7 +399,7 @@ class YoutubeProvider implements DownloaderProvider {
             'The subtitle file already exists: ${subtitleOutput.path}',
           );
         }
-        await subtitleTmp.copy(subtitleOutput.path);
+        sidecarFiles.add(await subtitleTmp.copy(subtitleOutput.path));
       }
 
       // 6. Cleanup temp files only after successful verification.
@@ -392,6 +408,7 @@ class YoutubeProvider implements DownloaderProvider {
       return DownloadTaskResult(
         outputFile: outputFile,
         merged: audioTmp != null,
+        sidecarFiles: sidecarFiles,
       );
     } catch (e) {
       if (e is DownloadCancelledException) {

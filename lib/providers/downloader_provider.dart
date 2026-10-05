@@ -11,9 +11,11 @@ class DownloadTaskResult {
   const DownloadTaskResult({
     required this.outputFile,
     required this.merged,
+    this.sidecarFiles = const [],
   });
 
   final File outputFile;
+  final List<File> sidecarFiles;
 
   /// True when separate video + audio streams were merged by ffmpeg.
   final bool merged;

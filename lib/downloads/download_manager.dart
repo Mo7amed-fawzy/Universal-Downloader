@@ -5,6 +5,7 @@ import 'package:flutter/foundation.dart';
 import '../core/errors/downloader_exceptions.dart';
 import '../core/models/download_options.dart';
 import '../core/models/media_info.dart';
+import '../core/process/cancel_token.dart';
 import '../core/services/log_service.dart';
 import '../providers/downloader_provider.dart';
 import '../providers/provider_registry.dart';
@@ -21,12 +22,15 @@ class DownloadManager extends ChangeNotifier {
     required this.repository,
     required this.log,
     DownloadQueue? queue,
+    this.publishDownload,
   }) : queue = queue ?? DownloadQueue();
 
   final ProviderRegistry registry;
   final DownloadRepository repository;
   final LogService log;
   final DownloadQueue queue;
+  final Future<String> Function(DownloadTaskResult, CancelToken)?
+  publishDownload;
 
   /// Task ids currently executing.
   final Set<String> _runningIds = {};
@@ -76,9 +80,11 @@ class DownloadManager extends ChangeNotifier {
 
     final provider = registry.byId(task.providerId);
     if (provider == null) {
-      task.markFailed(ProviderNotSupportedException(
-        'The provider for this task is no longer available.',
-      ));
+      task.markFailed(
+        ProviderNotSupportedException(
+          'The provider for this task is no longer available.',
+        ),
+      );
       notifyListeners();
       return;
     }
@@ -98,7 +104,9 @@ class DownloadManager extends ChangeNotifier {
   /// Starts queued tasks while execution slots are free.
   void _pump() {
     notifyListeners();
-    final pending = queue.pending.where((task) => !_runningIds.contains(task.id));
+    final pending = queue.pending.where(
+      (task) => !_runningIds.contains(task.id),
+    );
     if (pending.isEmpty) return;
 
     final slots = queue.maxConcurrent - _runningIds.length;
@@ -107,9 +115,11 @@ class DownloadManager extends ChangeNotifier {
     for (final task in pending.take(slots)) {
       final provider = registry.byId(task.providerId);
       if (provider == null) {
-        task.markFailed(ProviderNotSupportedException(
-          'The provider for this task is no longer available.',
-        ));
+        task.markFailed(
+          ProviderNotSupportedException(
+            'The provider for this task is no longer available.',
+          ),
+        );
         continue;
       }
       _runningIds.add(task.id);
@@ -129,7 +139,10 @@ class DownloadManager extends ChangeNotifier {
         onProgress: task.setProgress,
         cancelToken: task.cancelToken,
       );
-      task.markCompleted(result.outputFile.path);
+      final location =
+          await publishDownload?.call(result, task.cancelToken) ??
+          result.outputFile.path;
+      task.markCompleted(location);
     } on DownloadCancelledException {
       task.markCancelled();
       repository.cleanupTaskDirectory(task.id);

@@ -3,7 +3,7 @@ import 'dart:io';
 import '../../core/errors/downloader_exceptions.dart';
 import '../../core/models/subtitle_track.dart';
 import '../../core/process/cancel_token.dart';
-import '../../core/process/process_runner.dart';
+import '../../core/process/command_runner.dart';
 import 'youtube_extractor.dart';
 
 class YoutubeSubtitleDownloader {
@@ -14,7 +14,7 @@ class YoutubeSubtitleDownloader {
   });
 
   final String ytDlpPath;
-  final ProcessRunner runner;
+  final CommandRunner runner;
   final List<String> extraArgs;
 
   Future<File> download({

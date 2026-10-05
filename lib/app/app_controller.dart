@@ -1,18 +1,16 @@
-import 'dart:io';
-
 import 'package:flutter/material.dart';
 
-import '../core/process/process_runner.dart';
 import '../core/services/dependency_checker.dart';
 import '../core/services/log_service.dart';
 import '../core/utils/path_utils.dart';
-import '../core/tools/tool_paths.dart';
-import '../core/tools/tool_update_service.dart';
 import '../downloads/download_manager.dart';
 import '../downloads/download_repository.dart';
-import '../providers/direct/direct_media_provider.dart';
+import '../platform/download_platform.dart';
+import '../platform/download_platform_factory.dart';
+import '../providers/default_provider_factories.dart';
+import '../providers/provider_dependencies.dart';
+import '../providers/provider_factory.dart';
 import '../providers/provider_registry.dart';
-import '../providers/youtube/youtube_provider.dart';
 import '../settings/app_settings.dart';
 import '../settings/settings_service.dart';
 
@@ -25,9 +23,7 @@ class AppController extends ChangeNotifier {
     required this.settingsService,
     required this.registry,
     required this.manager,
-    required this.dependencyChecker,
-    required this.pathUtils,
-    required this.toolPaths,
+    required this.platform,
   });
 
   final LogService log;
@@ -35,9 +31,8 @@ class AppController extends ChangeNotifier {
   final SettingsService settingsService;
   final ProviderRegistry registry;
   final DownloadManager manager;
-  final DependencyChecker dependencyChecker;
-  final PathUtils pathUtils;
-  final ToolPaths toolPaths;
+  final DownloadPlatform platform;
+  PathUtils get pathUtils => platform.paths;
   bool updatingTools = false;
   String? toolUpdateMessage;
 
@@ -52,105 +47,50 @@ class AppController extends ChangeNotifier {
   }
 
   /// Builds the full application dependency graph.
-  static Future<AppController> create() async {
-    final log = LogService();
+  static Future<AppController> create({
+    DownloadPlatform? platform,
+    Iterable<ProviderFactory> providerFactories = defaultProviderFactories,
+  }) async {
+    final selectedPlatform =
+        platform ?? await const DownloadPlatformFactory().create();
     final settingsService = SettingsService();
     final settings = await settingsService.load();
-    log.debugEnabled = settings.debugLogging;
-
-    final pathUtils = const PathUtils();
-    final repository = DownloadRepository(paths: pathUtils);
-    final runner = const ProcessRunner();
-
-    final toolPaths = ToolPaths();
-    final ytDlp = toolPaths.resolve('yt-dlp', override: settings.ytDlpPath);
-    final ffmpeg = toolPaths.resolve('ffmpeg', override: settings.ffmpegPath);
-    final ffprobe = toolPaths.resolve(
-      'ffprobe',
-      override: settings.ffprobePath,
+    final log = LogService(
+      paths: selectedPlatform.paths,
+      debugEnabled: settings.debugLogging,
     );
-
-    final youtubeProvider = YoutubeProvider(
-      ytDlpPath: ytDlp,
-      ffmpegPath: ffmpeg,
-      ffprobePath: ffprobe,
-      denoPath: toolPaths.resolve('deno'),
-      runner: runner,
-      repository: repository,
-      log: log,
+    final repository = DownloadRepository(paths: selectedPlatform.paths);
+    final registry = ProviderRegistry.fromFactories(
+      factories: providerFactories,
+      dependencies: ProviderDependencies(
+        runner: selectedPlatform.runner,
+        repository: repository,
+        log: log,
+        tools: selectedPlatform.resolveTools(settings),
+      ),
     );
-    final directProvider = DirectMediaProvider(
-      ffprobePath: ffprobe,
-      runner: runner,
-      repository: repository,
-      log: log,
-    );
-
-    final registry = ProviderRegistry([youtubeProvider, directProvider]);
-
-    final checker = DependencyChecker(runner: runner);
-
     final manager = DownloadManager(
       registry: registry,
       repository: repository,
       log: log,
+      publishDownload: (result, cancelToken) =>
+          selectedPlatform.publishDownload(result, cancelToken: cancelToken),
     );
-
     final controller = AppController._(
       log: log,
       settings: settings,
       settingsService: settingsService,
       registry: registry,
       manager: manager,
-      dependencyChecker: checker,
-      pathUtils: pathUtils,
-      toolPaths: toolPaths,
+      platform: selectedPlatform,
     );
-
-    controller._applySettings();
     await controller.refreshDependencies();
     return controller;
   }
 
   void _applySettings() {
     log.debugEnabled = settings.debugLogging;
-    dependencyChecker.ytDlpPathOverride = toolPaths.resolve(
-      'yt-dlp',
-      override: settings.ytDlpPath,
-    );
-    dependencyChecker.ffmpegPathOverride = toolPaths.resolve(
-      'ffmpeg',
-      override: settings.ffmpegPath,
-    );
-    dependencyChecker.ffprobePathOverride = toolPaths.resolve(
-      'ffprobe',
-      override: settings.ffprobePath,
-    );
-    dependencyChecker.denoPathOverride = toolPaths.resolve('deno');
-    final ytDlp = registry.byId('youtube');
-    if (ytDlp is YoutubeProvider) {
-      ytDlp.ytDlpPath = toolPaths.resolve(
-        'yt-dlp',
-        override: settings.ytDlpPath,
-      );
-      ytDlp.ffmpegPath = toolPaths.resolve(
-        'ffmpeg',
-        override: settings.ffmpegPath,
-      );
-      ytDlp.ffprobePath = toolPaths.resolve(
-        'ffprobe',
-        override: settings.ffprobePath,
-      );
-      ytDlp.denoPath = toolPaths.resolve('deno');
-      ytDlp.setExtraYtDlpArgs(settings.extraYtDlpArgs);
-    }
-    final direct = registry.byId('direct');
-    if (direct is DirectMediaProvider) {
-      direct.ffprobePath = toolPaths.resolve(
-        'ffprobe',
-        override: settings.ffprobePath,
-      );
-    }
+    registry.configureTools(platform.resolveTools(settings));
   }
 
   Future<void> updateSettings(AppSettings next) async {
@@ -172,7 +112,7 @@ class AppController extends ChangeNotifier {
     checkingDependencies = true;
     notifyListeners();
     try {
-      dependencies = await dependencyChecker.checkAll();
+      dependencies = await platform.checkTools(settings);
     } finally {
       checkingDependencies = false;
       notifyListeners();
@@ -194,7 +134,7 @@ class AppController extends ChangeNotifier {
     notifyListeners();
     try {
       if (restoreIncluded) {
-        await toolPaths.useIncluded();
+        await platform.useIncludedTools();
         settings = settings.copyWith(
           ytDlpPath: '',
           ffmpegPath: '',
@@ -203,7 +143,7 @@ class AppController extends ChangeNotifier {
         await settingsService.save(settings);
         toolUpdateMessage = 'Using the tools included with the app.';
       } else {
-        toolUpdateMessage = await ToolUpdateService(toolPaths).update(
+        toolUpdateMessage = await platform.updateTools(
           onStatus: (message) {
             toolUpdateMessage = message;
             notifyListeners();
@@ -222,20 +162,9 @@ class AppController extends ChangeNotifier {
   }
 
   /// Resolves the output directory for new downloads.
-  String resolveOutputDirectory() {
-    if (settings.rememberLastDirectory &&
-        settings.lastDownloadDirectory.isNotEmpty) {
-      return settings.lastDownloadDirectory;
-    }
-    if (settings.defaultDownloadDirectory.isNotEmpty) {
-      return settings.defaultDownloadDirectory;
-    }
-    return defaultDownloadDirectory();
-  }
+  String resolveOutputDirectory() => platform.resolveOutputDirectory(settings);
 
-  String defaultDownloadDirectory() {
-    final home = Platform.environment['HOME'] ?? '';
-    final videos = '$home/Videos';
-    return Directory(videos).existsSync() ? videos : '$home/Downloads';
-  }
+  String defaultDownloadDirectory() => platform.defaultDownloadDirectory();
+
+  Future<void> openDownload(String location) => platform.openDownload(location);
 }

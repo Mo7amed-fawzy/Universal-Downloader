@@ -2,7 +2,7 @@ import 'dart:io';
 
 import '../../core/errors/downloader_exceptions.dart';
 import '../../core/process/cancel_token.dart';
-import '../../core/process/process_runner.dart';
+import '../../core/process/command_runner.dart';
 
 class YoutubeCoverDownloader {
   const YoutubeCoverDownloader({
@@ -11,7 +11,7 @@ class YoutubeCoverDownloader {
   });
 
   final String ffmpegPath;
-  final ProcessRunner runner;
+  final CommandRunner runner;
 
   Future<File> download({
     required Uri url,

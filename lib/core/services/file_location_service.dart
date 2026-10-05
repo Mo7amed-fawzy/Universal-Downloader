@@ -2,12 +2,13 @@ import 'dart:convert';
 import 'dart:io';
 
 import '../errors/downloader_exceptions.dart';
+import '../process/command_runner.dart';
 import '../process/process_runner.dart';
 
 class FileLocationService {
   const FileLocationService({this.runner = const ProcessRunner()});
 
-  final ProcessRunner runner;
+  final CommandRunner runner;
 
   Future<void> open(String path) async {
     final file = File(path).absolute;

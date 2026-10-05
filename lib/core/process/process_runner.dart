@@ -4,13 +4,14 @@ import 'dart:io';
 
 import '../errors/downloader_exceptions.dart';
 import 'cancel_token.dart';
+import 'command_runner.dart';
 import 'process_runner_result.dart';
 
 /// Safe process execution using argument arrays (never shell interpolation).
 ///
 /// Captures stdout/stderr, reports lines to an optional callback and supports
 /// cooperative cancellation that terminates the child process cleanly.
-class ProcessRunner {
+class ProcessRunner implements CommandRunner {
   const ProcessRunner();
 
   /// Runs [executable] with [arguments].
@@ -18,6 +19,7 @@ class ProcessRunner {
   /// When [onLine] is provided it is called for every line read from stdout
   /// and stderr. If [cancelToken] is cancelled while the process is running,
   /// the process is terminated and [DownloadCancelledException] is thrown.
+  @override
   Future<ProcessRunnerResult> run({
     required String executable,
     required List<String> arguments,

@@ -5,6 +5,7 @@ import '../errors/downloader_exceptions.dart';
 import '../models/download_options.dart';
 import '../models/video_format.dart';
 import '../process/cancel_token.dart';
+import '../process/command_runner.dart';
 import '../process/process_runner.dart';
 
 /// Verifies a produced media file with ffprobe.
@@ -34,12 +35,12 @@ class MediaAssembler {
   MediaAssembler({
     required this.ffmpegPath,
     required this.ffprobePath,
-    ProcessRunner? runner,
+    CommandRunner? runner,
   }) : runner = runner ?? const ProcessRunner();
 
   final String ffmpegPath;
   final String ffprobePath;
-  final ProcessRunner runner;
+  final CommandRunner runner;
 
   /// Decides the output container extension based on codecs and user
   /// preference. Prefers MP4, falls back to MKV for incompatible codecs.
