@@ -5,6 +5,8 @@ import 'package:archive/archive_io.dart';
 import 'package:crypto/crypto.dart';
 
 import '../process/process_runner.dart';
+import '../process/command_runner.dart';
+import 'tool_platform.dart';
 import '../process/cancel_token.dart';
 import 'tool_bundle.dart';
 import 'tool_paths.dart';
@@ -16,7 +18,7 @@ class ToolBundleInstaller {
   });
 
   final ToolPaths paths;
-  final ProcessRunner runner;
+  final CommandRunner runner;
 
   Future<void> install(File zip, String expectedHash, int revision) async {
     if ((await sha256.bind(zip.openRead()).first).toString() != expectedHash) {
@@ -29,9 +31,15 @@ class ToolBundleInstaller {
       try {
         final archive = ZipDecoder().decodeStream(input);
         var totalSize = 0;
+        final names = <String>{};
         for (final entry in archive) {
           totalSize += entry.size;
           if (!ToolBundle.validPath(entry.name) ||
+              !names.add(
+                paths.target == ToolPlatform.windowsX64
+                    ? entry.name.toLowerCase()
+                    : entry.name,
+              ) ||
               entry.isSymbolicLink ||
               !entry.isFile ||
               totalSize > 1500 * 1024 * 1024) {
@@ -49,7 +57,7 @@ class ToolBundleInstaller {
       } finally {
         await input.close();
       }
-      final bundle = ToolBundle.read(staging);
+      final bundle = ToolBundle.read(staging, target: paths.target);
       if (bundle.revision != revision ||
           revision <= (paths.selected?.revision ?? 0)) {
         throw const FormatException('Tool update is incompatible or outdated');
@@ -71,12 +79,16 @@ class ToolBundleInstaller {
       }
       for (final name in ToolBundle.executables) {
         final path = bundle.executable(name);
-        final mode = await runner.run(
-          executable: '/bin/chmod',
-          arguments: ['755', path],
-        );
-        if (!mode.success) {
-          throw const FileSystemException('Could not prepare tool executable');
+        if (paths.target == ToolPlatform.linuxX64) {
+          final mode = await runner.run(
+            executable: '/bin/chmod',
+            arguments: ['755', path],
+          );
+          if (!mode.success) {
+            throw const FileSystemException(
+              'Could not prepare tool executable',
+            );
+          }
         }
         final cancellation = CancelToken();
         final timer = Timer(const Duration(seconds: 30), cancellation.cancel);

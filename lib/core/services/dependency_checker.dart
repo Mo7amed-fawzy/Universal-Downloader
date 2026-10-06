@@ -91,7 +91,9 @@ class DependencyChecker {
   }) async {
     var executable = overridePath;
 
-    if (executable == null || executable.isEmpty || !executable.contains('/')) {
+    if (executable == null ||
+        executable.isEmpty ||
+        (!executable.contains('/') && !executable.contains(r'\'))) {
       executable = await _resolveFromPath(
         executable == null || executable.isEmpty ? name : executable,
       );
@@ -121,9 +123,15 @@ class DependencyChecker {
   }
 
   Future<String?> _resolveFromPath(String name) async {
-    for (final directory in (Platform.environment['PATH'] ?? '').split(':')) {
+    for (final directory in (Platform.environment['PATH'] ?? '').split(
+      Platform.isWindows ? ';' : ':',
+    )) {
       if (directory.isEmpty) continue;
-      final file = File('$directory/$name');
+      final filename =
+          Platform.isWindows && !name.toLowerCase().endsWith('.exe')
+          ? '$name.exe'
+          : name;
+      final file = File('$directory/$filename');
       if (await file.exists()) return file.absolute.path;
     }
     return null;

@@ -46,15 +46,15 @@ class ToolUpdateService {
       Uri? metadataUrl;
       Uri? archiveUrl;
       for (final asset in assets) {
-        if (asset['name'] == 'runtime-linux-x64.json') {
+        if (asset['name'] == 'runtime-${paths.target.id}.json') {
           metadataUrl = _assetUrl(asset);
         }
-        if (asset['name'] == 'runtime-linux-x64.zip') {
+        if (asset['name'] == 'runtime-${paths.target.id}.zip') {
           archiveUrl = _assetUrl(asset);
         }
       }
       if (metadataUrl == null || archiveUrl == null) {
-        return 'No tool update is available for Linux x64.';
+        return 'No tool update is available for ${paths.target.label}.';
       }
       await paths.updatesDirectory.create(recursive: true);
       temporary = await paths.updatesDirectory.createTemp('.download-');
@@ -63,7 +63,7 @@ class ToolUpdateService {
       final metadata = jsonDecode(await metadataFile.readAsString());
       if (metadata is! Map<String, dynamic> ||
           metadata['schema'] != 1 ||
-          metadata['platform'] != 'linux-x64' ||
+          metadata['platform'] != paths.target.id ||
           metadata['revision'] is! int ||
           metadata['sha256'] is! String ||
           !RegExp(r'^[a-f0-9]{64}$').hasMatch(metadata['sha256'] as String)) {
@@ -80,9 +80,13 @@ class ToolUpdateService {
       final bundledPath = paths.bundledDirectory.path;
       final updatesPath = paths.updatesDirectory.path;
       final hash = metadata['sha256'] as String;
+      final target = paths.target;
+      final allowSystemFallback = paths.allowSystemFallback;
       await Isolate.run(
         () => ToolBundleInstaller(
           paths: ToolPaths(
+            target: target,
+            allowSystemFallback: allowSystemFallback,
             bundledDirectory: Directory(bundledPath),
             updatesDirectory: Directory(updatesPath),
           ),

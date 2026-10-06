@@ -5,8 +5,10 @@ void main() {
   const sanitizer = FilenameSanitizer();
 
   test('keeps ordinary titles unchanged', () {
-    expect(sanitizer.sanitize('Rick Astley - Never Gonna Give You Up'),
-        'Rick Astley - Never Gonna Give You Up');
+    expect(
+      sanitizer.sanitize('Rick Astley - Never Gonna Give You Up'),
+      'Rick Astley - Never Gonna Give You Up',
+    );
   });
 
   test('removes path separators', () {
@@ -42,6 +44,14 @@ void main() {
   test('caps very long titles', () {
     final long = 'x' * 500;
     expect(sanitizer.sanitize(long).length, lessThanOrEqualTo(180));
+  });
+
+  test('Windows device names and trailing spaces remain writable', () {
+    for (final name in ['CON', 'con.txt', 'NUL', 'COM1', 'LPT³.log']) {
+      expect(sanitizer.sanitize(name), '_$name');
+    }
+    expect(sanitizer.sanitize('title . '), 'title');
+    expect(sanitizer.sanitize('normal.console'), 'normal.console');
   });
 
   test('empty input yields the placeholder', () {

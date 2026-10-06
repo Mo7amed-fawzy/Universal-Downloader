@@ -49,33 +49,33 @@ class ProcessRunner implements CommandRunner {
         .transform(utf8.decoder)
         .transform(const LineSplitter())
         .listen(
-      (line) {
-        stdoutLines.add(line);
-        onLine?.call(line, true);
-      },
-      onDone: () {
-        if (!stdoutDone.isCompleted) stdoutDone.complete();
-      },
-      onError: (Object e) {
-        if (!stdoutDone.isCompleted) stdoutDone.complete();
-      },
-    );
+          (line) {
+            stdoutLines.add(line);
+            onLine?.call(line, true);
+          },
+          onDone: () {
+            if (!stdoutDone.isCompleted) stdoutDone.complete();
+          },
+          onError: (Object e) {
+            if (!stdoutDone.isCompleted) stdoutDone.complete();
+          },
+        );
 
     process.stderr
         .transform(utf8.decoder)
         .transform(const LineSplitter())
         .listen(
-      (line) {
-        stderrLines.add(line);
-        onLine?.call(line, false);
-      },
-      onDone: () {
-        if (!stderrDone.isCompleted) stderrDone.complete();
-      },
-      onError: (Object e) {
-        if (!stderrDone.isCompleted) stderrDone.complete();
-      },
-    );
+          (line) {
+            stderrLines.add(line);
+            onLine?.call(line, false);
+          },
+          onDone: () {
+            if (!stderrDone.isCompleted) stderrDone.complete();
+          },
+          onError: (Object e) {
+            if (!stderrDone.isCompleted) stderrDone.complete();
+          },
+        );
 
     StreamSubscription<void>? cancelSub;
     if (cancelToken != null) {
@@ -111,6 +111,30 @@ class ProcessRunner implements CommandRunner {
   /// Terminates a child process: SIGTERM first, then SIGKILL after a grace
   /// period so that children (e.g. spawned ffmpeg) are released.
   static Future<void> _terminate(Process process) async {
+    if (Platform.isWindows) {
+      final systemRoot = Platform.environment['SystemRoot'];
+      if (systemRoot != null) {
+        try {
+          final killer = await Process.start(
+            '$systemRoot/System32/taskkill.exe',
+            ['/PID', '${process.pid}', '/T', '/F'],
+            runInShell: false,
+          );
+          final output = Future.wait([
+            killer.stdout.drain<void>(),
+            killer.stderr.drain<void>(),
+          ]);
+          try {
+            await killer.exitCode.timeout(const Duration(seconds: 10));
+          } on TimeoutException {
+            killer.kill();
+          }
+          await output;
+        } on ProcessException catch (_) {}
+      }
+      process.kill();
+      return;
+    }
     try {
       process.kill(ProcessSignal.sigterm);
     } catch (_) {

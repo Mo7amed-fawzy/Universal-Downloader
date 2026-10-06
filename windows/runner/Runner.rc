@@ -90,12 +90,12 @@ BEGIN
         BLOCK "040904e4"
         BEGIN
             VALUE "CompanyName", "com.example" "\0"
-            VALUE "FileDescription", "video_downloader" "\0"
+            VALUE "FileDescription", "Universal Downloader" "\0"
             VALUE "FileVersion", VERSION_AS_STRING "\0"
-            VALUE "InternalName", "video_downloader" "\0"
+            VALUE "InternalName", "Universal Downloader" "\0"
             VALUE "LegalCopyright", "Copyright (C) 2026 com.example. All rights reserved." "\0"
-            VALUE "OriginalFilename", "video_downloader.exe" "\0"
-            VALUE "ProductName", "video_downloader" "\0"
+            VALUE "OriginalFilename", "universal_downloader.exe" "\0"
+            VALUE "ProductName", "Universal Downloader" "\0"
             VALUE "ProductVersion", VERSION_AS_STRING "\0"
         END
     END

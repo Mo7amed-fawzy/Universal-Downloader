@@ -2,16 +2,23 @@ import 'dart:io';
 
 import '../utils/path_utils.dart';
 import 'tool_bundle.dart';
+import 'tool_platform.dart';
 
 class ToolPaths {
-  ToolPaths({Directory? bundledDirectory, Directory? updatesDirectory})
-    : bundledDirectory =
-          bundledDirectory ??
-          Directory('${File(Platform.resolvedExecutable).parent.path}/tools'),
-      updatesDirectory =
-          updatesDirectory ??
-          Directory('${const PathUtils().appDataDirectory().path}/tools');
+  ToolPaths({
+    Directory? bundledDirectory,
+    Directory? updatesDirectory,
+    this.target = ToolPlatform.linuxX64,
+    this.allowSystemFallback = true,
+  }) : bundledDirectory =
+           bundledDirectory ??
+           Directory('${File(Platform.resolvedExecutable).parent.path}/tools'),
+       updatesDirectory =
+           updatesDirectory ??
+           Directory('${const PathUtils().appDataDirectory().path}/tools');
 
+  final ToolPlatform target;
+  final bool allowSystemFallback;
   final Directory bundledDirectory;
   final Directory updatesDirectory;
 
@@ -38,10 +45,11 @@ class ToolPaths {
     if (override.trim().isNotEmpty) return override.trim();
     final bundle = selected;
     if (bundle != null) return bundle.executable(name);
-    if (File('${bundledDirectory.path}/manifest.json').existsSync()) {
-      return '${bundledDirectory.path}/$name';
+    if (!allowSystemFallback ||
+        File('${bundledDirectory.path}/manifest.json').existsSync()) {
+      return '${bundledDirectory.path}/${target.executableName(name)}';
     }
-    return name;
+    return target.executableName(name);
   }
 
   Future<void> useIncluded() async {
@@ -50,7 +58,7 @@ class ToolPaths {
 
   ToolBundle? _read(Directory directory) {
     try {
-      final bundle = ToolBundle.read(directory);
+      final bundle = ToolBundle.read(directory, target: target);
       if (!ToolBundle.executables.every(
         (name) => File(bundle.executable(name)).existsSync(),
       )) {

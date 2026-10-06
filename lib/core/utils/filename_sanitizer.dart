@@ -53,7 +53,14 @@ class FilenameSanitizer {
       result = result.substring(0, maxLength).trimRight();
     }
 
-    return result;
+    result = result.replaceAll(RegExp(r'[. ]+$'), '');
+    if (RegExp(
+      r'^(con|prn|aux|nul|com[1-9¹²³]|lpt[1-9¹²³])(?:\.|$)',
+      caseSensitive: false,
+    ).hasMatch(result)) {
+      result = '_$result';
+    }
+    return result.isEmpty ? _fallback : result;
   }
 
   static const String _fallback = 'download';
