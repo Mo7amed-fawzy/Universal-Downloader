@@ -3,7 +3,7 @@
 Universal Downloader runs these unmodified tools as separate processes:
 
 - yt-dlp: https://github.com/yt-dlp/yt-dlp. Source is under the Unlicense;
-  the standalone Linux executable includes third-party components and is
+  the standalone Linux and Windows executables include third-party components and are
   distributed under GPLv3+. See the included third-party licenses.
 - FFmpeg and FFprobe: https://ffmpeg.org, LGPL build supplied by
   https://github.com/BtbN/FFmpeg-Builds. The exact build, checksum and upstream
@@ -18,6 +18,20 @@ The manifest identifies the versions used in this package. Keep all notices
 with redistributed packages. Before public distribution, provide the complete
 corresponding source and build materials required by the licenses of the exact
 binary builds; upstream download links alone are not a source distribution.
+
+## Windows runtime
+
+Windows uses the source pins in `tool_versions_windows.json`. Its standalone
+yt-dlp executable includes Python and third-party components; preserve the
+included yt-dlp license inventory. The FFmpeg/FFprobe Windows build is the
+static LGPL variant; the manifest and collected FFmpeg notices identify its
+components. Deno is the official Windows x64 release.
+
+Release Visual C++ CRT DLLs come from the developer's Visual Studio Redist
+folder and are copied app-locally, including with tool updates. Redistribution
+is subject to the applicable Visual Studio license and its REDIST list; do not
+substitute debug CRTs or DLLs copied from System32. This package does not include
+Windows itself, and targets Windows 10/11's system UCRT.
 
 ## Android preview
 

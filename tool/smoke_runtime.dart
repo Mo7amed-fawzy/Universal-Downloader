@@ -1,17 +1,26 @@
+import 'dart:async';
+import 'dart:convert';
 import 'dart:io';
+
+import 'package:universal_downloader/core/errors/downloader_exceptions.dart';
 
 import 'package:universal_downloader/core/process/cancel_token.dart';
 import 'package:universal_downloader/core/process/process_runner.dart';
 import 'package:universal_downloader/core/services/dependency_checker.dart';
 import 'package:universal_downloader/core/services/media_assembler.dart';
 import 'package:universal_downloader/core/tools/tool_paths.dart';
+import 'package:universal_downloader/core/tools/tool_platform.dart';
 import 'package:universal_downloader/providers/youtube/youtube_provider.dart';
 
 Future<void> main(List<String> arguments) async {
   if (arguments.isEmpty) throw ArgumentError('Pass the app bundle directory');
-  final root = await Directory.systemTemp.createTemp('runtime-smoke-');
+  final root = await Directory.systemTemp.createTemp('runtime smoke العربية ');
   try {
     final paths = ToolPaths(
+      target: Platform.isWindows
+          ? ToolPlatform.windowsX64
+          : ToolPlatform.linuxX64,
+      allowSystemFallback: false,
       bundledDirectory: Directory(
         '${Directory(arguments.first).absolute.path}/tools',
       ),
@@ -100,6 +109,9 @@ Future<void> main(List<String> arguments) async {
     if (!js.success || js.stdout.trim() != '2') {
       throw StateError('Deno execution failed');
     }
+    if (Platform.isWindows) {
+      await verifyWindowsCancellation(paths.resolve('deno'), root);
+    }
     if (arguments.length > 1) {
       final provider = YoutubeProvider(
         ytDlpPath: paths.resolve('yt-dlp'),
@@ -121,4 +133,41 @@ Future<void> main(List<String> arguments) async {
   } finally {
     await root.delete(recursive: true);
   }
+}
+
+Future<void> verifyWindowsCancellation(String deno, Directory root) async {
+  final marker = File('${root.path}/child-alive.txt');
+  final child =
+      'setInterval(() => Deno.writeTextFileSync(${jsonEncode(marker.path)}, "alive\\n", {append: true}), 50); console.log("CHILD_READY");';
+  final parent =
+      'const child = new Deno.Command(Deno.execPath(), {args: ["eval", ${jsonEncode(child)}], stdout: "inherit", stderr: "inherit"}).spawn(); await child.status;';
+  final token = CancelToken();
+  var ready = false;
+  final deadline = Timer(const Duration(seconds: 15), token.cancel);
+  try {
+    await const ProcessRunner()
+        .run(
+          executable: deno,
+          arguments: ['eval', parent],
+          cancelToken: token,
+          onLine: (line, _) {
+            if (line == 'CHILD_READY') {
+              ready = true;
+              token.cancel();
+            }
+          },
+        )
+        .timeout(const Duration(seconds: 25));
+    throw StateError('Cancellation returned success');
+  } on DownloadCancelledException {
+    if (!ready) throw StateError('Child process did not start');
+  } finally {
+    deadline.cancel();
+  }
+  final length = marker.existsSync() ? marker.lengthSync() : 0;
+  await Future<void>.delayed(const Duration(milliseconds: 300));
+  if ((marker.existsSync() ? marker.lengthSync() : 0) != length) {
+    throw StateError('Cancellation left a child process running');
+  }
+  stdout.writeln('PASS: Windows process-tree cancellation');
 }

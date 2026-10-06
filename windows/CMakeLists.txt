@@ -4,7 +4,7 @@ project(video_downloader LANGUAGES CXX)
 
 # The name of the executable created for the application. Change this to change
 # the on-disk name of your application.
-set(BINARY_NAME "video_downloader")
+set(BINARY_NAME "universal_downloader")
 
 # Explicitly opt in to modern CMake behaviors to avoid warnings with recent
 # versions of CMake.
@@ -106,3 +106,35 @@ install(DIRECTORY "${PROJECT_BUILD_DIR}/${FLUTTER_ASSET_DIR_NAME}"
 install(FILES "${AOT_LIBRARY}" DESTINATION "${INSTALL_BUNDLE_DATA_DIR}"
   CONFIGURATIONS Profile;Release
   COMPONENT Runtime)
+
+if(NOT CMAKE_SIZEOF_VOID_P EQUAL 8 OR CMAKE_GENERATOR_PLATFORM MATCHES "[Aa][Rr][Mm]")
+  message(FATAL_ERROR "The included Windows tools currently target x64 only.")
+endif()
+set(TOOL_RUNTIME_DIR "${CMAKE_CURRENT_SOURCE_DIR}/../build/tool-runtime-windows")
+install(CODE "
+  if(CMAKE_INSTALL_CONFIG_NAME MATCHES \"^(Release|Profile)$\" AND
+     NOT EXISTS \"${TOOL_RUNTIME_DIR}/manifest.json\")
+    message(FATAL_ERROR \"Run python tool/prepare_tools.py --platform windows-x64 before building Windows.\")
+  endif()
+" COMPONENT Runtime)
+if(EXISTS "${TOOL_RUNTIME_DIR}/manifest.json")
+  file(READ "${TOOL_RUNTIME_DIR}/manifest.json" TOOL_MANIFEST)
+  if(NOT TOOL_MANIFEST MATCHES "\"platform\"[ \r\n]*:[ \r\n]*\"windows-x64\"")
+    message(FATAL_ERROR "The tools runtime must target windows-x64.")
+  endif()
+  if(NOT TOOL_MANIFEST MATCHES "\"runtimeValidated\"[ \r\n]*:[ \r\n]*true")
+    message(FATAL_ERROR "Run tool/prepare_tools.py on Windows without --skip-execution.")
+  endif()
+  install(CODE "file(REMOVE_RECURSE \"${CMAKE_INSTALL_PREFIX}/tools\")" COMPONENT Runtime)
+  install(DIRECTORY "${TOOL_RUNTIME_DIR}/" DESTINATION "${CMAKE_INSTALL_PREFIX}/tools"
+    COMPONENT Runtime)
+endif()
+
+set(CMAKE_INSTALL_SYSTEM_RUNTIME_LIBS_SKIP TRUE)
+set(CMAKE_INSTALL_DEBUG_LIBRARIES FALSE)
+include(InstallRequiredSystemLibraries)
+if(NOT CMAKE_INSTALL_SYSTEM_RUNTIME_LIBS)
+  message(FATAL_ERROR "Visual C++ redistributable DLLs were not found in Visual Studio.")
+endif()
+install(PROGRAMS ${CMAKE_INSTALL_SYSTEM_RUNTIME_LIBS}
+  DESTINATION "${CMAKE_INSTALL_PREFIX}" CONFIGURATIONS Release;Profile COMPONENT Runtime)
