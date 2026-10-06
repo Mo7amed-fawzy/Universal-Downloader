@@ -6,7 +6,7 @@ import '../utils/path_utils.dart';
 /// rotating log file in the application data directory.
 class LogService {
   LogService({PathUtils? paths, this.debugEnabled = false})
-      : _paths = paths ?? const PathUtils();
+    : _paths = paths ?? const PathUtils();
 
   final PathUtils _paths;
   bool debugEnabled;
@@ -22,9 +22,12 @@ class LogService {
   }
 
   void _write(String level, String message) {
-    final line = '[${DateTime.now().toIso8601String()}] '
+    final line =
+        '[${DateTime.now().toIso8601String()}] '
         '[${level.padRight(5)}] $message';
-    stdout.writeln(line);
+    try {
+      stdout.writeln(line);
+    } on IOException catch (_) {}
     _buffer.add(line);
     if (_buffer.length > _maxBufferedLines) {
       _buffer.removeRange(0, _buffer.length - _maxBufferedLines);
