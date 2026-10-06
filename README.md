@@ -1,6 +1,7 @@
 # Universal Downloader
 
-A Flutter (Material 3) media downloader for Linux desktop and an Android preview.
+A Flutter (Material 3) media downloader for Linux desktop, with an Android preview
+and a Windows x64 implementation awaiting native build validation.
 
 Paste a URL and the app detects the provider, lists the real available
 formats, and downloads the best video stream plus your preferred audio track
@@ -51,6 +52,39 @@ archive and tool update assets in `dist/`. The unpacked bundle is written to
 
 See [packaging and update instructions](tool/README.md) for version pins,
 clean-environment checks, release assets, and redistribution requirements.
+
+## Windows Preview
+
+The Windows implementation targets Windows 10/11 x64 and uses the same provider,
+queue, language selection, and stream-copy pipeline as Linux. Native Windows
+services supply the user's Downloads folder and local app data directory, and
+reveal completed files in Explorer. This implementation has been tested through
+Dart mocks on Linux; the Windows executable has not yet been built or run.
+
+Build on a Windows development machine with Flutter, Visual Studio's
+**Desktop development with C++** workload, and Python 3.11 or newer:
+
+```powershell
+flutter pub get
+python tool/build_windows.py
+```
+
+The script prepares pinned Windows tools, builds the Release app, verifies the
+bundle, and runs tool/merge/cancellation checks before creating
+`dist/universal-downloader-windows-x64.zip`. Send that complete ZIP. The user
+extracts it and opens `universal-downloader.exe` inside the extracted folder;
+keep `data/`, `tools/`, and the DLLs beside it. The package includes standalone
+yt-dlp (with Python and its EJS solver), Deno, FFmpeg, FFprobe, and app-local
+Visual C++ runtime DLLs. No developer SDK, Python installation, media tools,
+or separate Visual C++ installer is intended on the user's computer.
+
+Windows runtime updates use their own `runtime-windows-x64` assets. App logs,
+temporary downloads, and tool updates live under
+`%LOCALAPPDATA%/UniversalDownloader`. Default downloads use the Windows known
+Downloads folder, including a redirected folder. See the
+[Windows build and validation steps](tool/README.md#windows-x64) before handing
+out the first package; clean Windows startup and an actual download are still
+required validation.
 
 ## Android Preview
 
@@ -237,7 +271,9 @@ lib/
 │   ├── tools/        bundled paths, verified update installation, release checks
 │   └── utils/        filename sanitization, path helpers, format helpers
 ├── platform/         OS detection + DownloadPlatform contract
-│   ├── linux/        Linux tools, paths, updates, publication, file opening
+│   ├── desktop/      shared desktop tool configuration, updates, publication
+│   ├── linux/        Linux paths and file opening
+│   ├── windows/      Windows known folders, bundled EXEs, Explorer integration
 │   └── android/      native command bridge, private paths, MediaStore publication
 ├── providers/        provider contracts + factories + registry + format selection
 │   ├── factories/    construct providers using the selected platform services
@@ -270,7 +306,8 @@ location can be a filesystem path or a content URI. A publisher must honor its
 cancellation token before committing a file and clean up partial publication
 on failure. Linux publication returns the provider's already verified file.
 
-Linux and the Android preview implement this contract. The Android factory
+Linux, Windows, and the Android preview implement this contract. Windows native
+build/runtime validation remains outstanding. The Android factory
 initializes bundled native tools asynchronously before constructing providers.
 Completed results carry subtitle sidecar files so Android publishes the entire
 selected output. Other operating systems remain unsupported, and the existing

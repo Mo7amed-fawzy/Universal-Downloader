@@ -1,8 +1,73 @@
 # Universal Downloader: Project State
 
-Last updated: 2026-10-05 (Africa/Cairo).
+Last updated: 2026-10-06 (Africa/Cairo).
 
-## Current Checkpoint
+## Current Checkpoint: Windows x64 Preparation
+
+Windows implementation and portable packaging are ready for native build/testing
+on the user's other Windows machine. This session ran on Linux. No Windows EXE,
+ZIP release, native C++ compilation, or Windows live download has been verified.
+Changes are organized into four local commits on main: no-console logging,
+Windows platform integration, portable packaging, and documentation. No push
+or publication was performed. Commit-only review preserved source contents;
+no builds or application tests were rerun while organizing these commits.
+
+- `WindowsDownloadPlatform` implements the existing OS abstraction via shared
+  `DesktopDownloadPlatform`; provider/download logic remains shared with Linux.
+  Native MethodChannel code resolves LocalAppData and redirected Downloads via
+  known folders, and reveals files in Explorer without shell command strings.
+- Windows tools resolve beside the app with `.exe` names and no implicit PATH
+  fallback. Bundles/updates use the explicit `windows-x64` target and separate
+  release assets. Updates reject cross-platform manifests, Windows-unsafe paths,
+  case-colliding entries, damaged files, and non-advancing revisions; no chmod
+  is invoked for Windows tools. Linux still uses its existing runtime format.
+- Windows cancellation uses the system `taskkill /PID /T /F`; native execution
+  remains unverified. Filenames avoid Windows device names. Logs keep working
+  without an attached console (covered with a failing stdout fixture).
+- `tool/build_windows.py` builds a portable complete ZIP. Preparation downloads
+  hash-pinned Windows yt-dlp 2026.08.19, Deno 2.9.7, and BtbN FFmpeg/FFprobe
+  n8.1.3 (2026-10-05 autobuild). Visual C++ release DLLs are copied from the build
+  machine's Visual Studio Redist into the tools package and beside the app.
+  End users are intended to extract the folder and launch the EXE with no
+  separate tool/runtime installer. CMake refuses an unprepared/inspection-only
+  runtime. The build script checks files/hashes and runs smoke checks before ZIPs.
+- The old project was reread as a reference. It copies tools through development
+  paths and does not connect those paths consistently to the downloader. No old
+  binaries or old download implementation were copied into this project.
+
+### Checks Actually Run for Windows Work
+
+- `flutter analyze --no-pub`: passed after final Dart changes.
+- Broad local unit/widget tests: 145 passed; subsequent focused Windows/log tests:
+  20 passed, including the newly added no-console logging regression.
+- `python3 tool/test_windows_packaging.py`: 4 passed. Python scripts compile.
+- `python3 tool/prepare_tools.py --platform windows-x64 --skip-execution`: passed.
+  Download hashes verified; all four EXEs inspected as PE x64; all 44 staged
+  manifest file hashes matched. This inspection runtime has no Visual C++ DLLs
+  and explicitly records `runtimeValidated: false`; it is not deployable.
+- `python3 tool/prepare_tools.py --platform linux-x64`: passed, all tool version
+  commands executed. Current `tool/smoke_runtime.dart` passed against the existing
+  Linux release bundle: four tools, real MP4/MKV artwork merges, FFprobe, and Deno.
+  No Linux application rebuild or live network download was performed.
+- `git diff --check`: passed. No Windows/Wine/MSVC execution on this host.
+
+### Handoff to the Windows Machine
+
+Read `tool/README.md` Windows x64 section. Bring the committed source and
+preferably `.tool-cache`; BtbN daily downloads may expire. These commits are
+local until explicitly pushed or transferred to the Windows machine.
+Do not copy Linux `build/` or `.dart_tool/` as Windows build artifacts.
+On Windows install developer prerequisites (Flutter, Visual Studio C++ workload,
+Python 3.11+), run `flutter pub get`, the selected Windows tests in the guide,
+and `python tool/build_windows.py`. Output is intended at
+`dist/universal-downloader-windows-x64.zip`; run the EXE in the entire extracted
+folder, not alone. Fix native build/runtime findings there before claiming
+Windows support verified. Validate clean-machine startup, actual Arabic audio
+and subtitles, cancellation/child cleanup, Explorer reveal, and update/restore.
+The build script's runtime smoke includes a Windows-only child cancellation
+check with a system-only PATH. No CI deployment or remote Windows setup was requested.
+
+## Previous Android Checkpoint
 
 Android foreground-download preview is implemented on top of the OS/provider
 abstractions. All tools are included in each APK; users install no additional
@@ -236,13 +301,14 @@ Use `git status -sb` and `git log` for the current local/remote relationship.
 
 ## Architecture
 
-Universal Downloader is a Flutter Material 3 Linux desktop app with an Android preview. Dart package:
+Universal Downloader is a Flutter Material 3 Linux desktop app with Android preview
+and a Windows implementation awaiting native validation. Dart package:
 `universal_downloader`; folder: `video_downloader`; version: `1.0.0+1`.
 
 | Area | Responsibility |
 | --- | --- |
 | `lib/main.dart`, `lib/app/` | AppController startup, providers, settings, checks, queue composition. |
-| `lib/platform/` | OS detection, DownloadPlatform contract, Linux and Android runtime services. |
+| `lib/platform/` | OS detection and DownloadPlatform; shared desktop services, Linux/Android, Windows implementation awaiting native validation. |
 | `lib/providers/` | Provider contracts, factories, injected dependencies, registry, format selection; YouTube and direct HTTP(S). |
 | `lib/downloads/` | Queue, task state, retry/concurrency, temporary files. |
 | `lib/core/process/` | CommandRunner contract; local argument-array execution, output capture, SIGTERM/SIGKILL cancellation. |
@@ -253,7 +319,8 @@ Universal Downloader is a Flutter Material 3 Linux desktop app with an Android p
 | `tool/` | Runtime pins, build/packaging, clean-container setup, smoke check. |
 
 Only YouTube and direct HTTP(S) providers are registered. Social-provider files
-are stubs; Linux and the Android preview have runtime implementations.
+are stubs; Linux and the Android preview have runtime implementations. Windows
+also implements the contract, with native build/run validation still pending.
 
 YouTube metadata/DASH audio uses `ios,web_embedded,default`; video uses
 `web_embedded,default`; HLS uses `tv_embedded`. Metadata combines JSON with a
@@ -324,8 +391,8 @@ run during this review. Keep the current app as the implementation base.
 ## Next Session
 
 Read this file, inspect relevant source, and follow the user's current request.
-Android follow-ups are hardware validation and background/queue recovery; follow
-the current user request before starting them.
+The user will continue Windows build/testing on their other Windows machine.
+Start with the Windows handoff above. Android follow-ups remain separate work.
 Use main only and one-line Conventional Commits when commits are requested.
 Use the git-commit skill for commit work. Do not publish releases, fix unrelated
 observations, or treat follow-up suggestions as standing authorization.

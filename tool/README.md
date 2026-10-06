@@ -1,4 +1,4 @@
-# Linux packaging and tool updates
+# Desktop packaging and tool updates
 
 The supported package is Linux x86_64. It includes standalone yt-dlp with its
 JavaScript solver, Deno, and an LGPL FFmpeg/FFprobe build. App processes use
@@ -83,6 +83,84 @@ The container supplies GTK/EGL libraries and Xvfb for optional headless app
 startup checks. Use `docker run --init` when launching Xvfb so signal handling
 works correctly. It does not establish compatibility with every Linux
 distribution.
+
+## Windows x64
+
+The Windows source and packaging path are implemented; native compilation and
+execution must be validated on Windows. This Linux session checked Dart logic,
+Windows download hashes/PE architecture, and packaging tests, not a Windows EXE.
+
+On the Windows **developer** machine, install Flutter (baseline 3.44.6/Dart 3.12.2),
+Visual Studio with **Desktop development with C++**, and Python 3.11 or newer.
+These are build requirements only. Flutter's official setup guide is at
+https://docs.flutter.dev/platform-integration/windows/setup.
+
+From the project root in PowerShell:
+
+```powershell
+flutter doctor -v
+flutter pub get
+flutter analyze --no-pub
+flutter test --no-pub test/unit/windows_platform_test.dart test/unit/log_service_test.dart test/unit/filename_sanitizer_test.dart
+python tool/test_windows_packaging.py
+python tool/build_windows.py
+.\build\windows\x64\runner\Release\universal_downloader.exe
+```
+
+`build_windows.py` performs the following steps:
+
+1. Downloads the exact URLs/checksums in `tool_versions_windows.json` into
+   `.tool-cache`, then prepares `build/tool-runtime-windows` and its file manifest.
+   Tools are official standalone yt-dlp, Deno, and BtbN's static LGPL FFmpeg/FFprobe.
+2. Copies release x64 Visual C++ CRT DLLs from the developer's Visual Studio
+   redistributable directory into the tools runtime, so updated tools remain
+   self-contained. `VCToolsRedistDir` can specify the installed redist directory;
+   otherwise `vswhere` selects the latest C++ installation. Debug CRTs are excluded.
+3. Runs all four executable version checks and `flutter build windows --release`.
+   CMake copies the complete runtime and app-local compiler runtime DLLs.
+   Release/Profile installation fails without a prepared runtime; an inspection-only
+   runtime made with `--skip-execution` cannot be packaged by CMake.
+4. Checks packaged files/hashes, compiles `smoke_runtime.dart`, and runs local
+   MP4/MKV artwork merges, FFprobe verification, JavaScript, and Windows child-process
+   cancellation. The smoke process PATH contains only Windows system directories.
+5. Writes `dist/universal-downloader-windows-x64.zip`, `runtime-windows-x64.zip`,
+   `runtime-windows-x64.json`, and SHA-256 sidecars. It does not publish anything.
+
+The app ZIP is portable: extract the entire `universal-downloader` folder and
+run `universal_downloader.exe`. Do not send the EXE alone. End users need no
+Flutter, Visual Studio, Python, Deno, or media-tool installation. Windows 10/11
+supplies the UCRT; the package includes the compiler runtime beside the app.
+Microsoft documents app-local deployment at
+https://learn.microsoft.com/en-us/cpp/windows/deployment-in-visual-cpp.
+Runtime DLL updates therefore require delivering an updated package.
+
+For debug development, run `python tool/prepare_tools.py --platform windows-x64`
+then `flutter run -d windows`. On Linux, `--skip-execution` can download and
+inspect Windows files, but does not provide the Visual C++ runtime, run EXEs,
+or prove a deployable package. Python packaging tests run on either OS.
+Some older Linux tests use `/bin/sh` fixtures; the command above selects portable
+Windows tests rather than assuming every existing test runs on Windows.
+
+Before distributing the first Windows build:
+
+- Launch the extracted Release app by double-clicking it on clean Windows,
+  preferably Windows Sandbox without Python, media tools, or a developer PATH.
+  Do not rely only on `flutter run` or the build machine's installed CRT.
+- Check all four tools in Diagnostics. Test a path containing spaces and Arabic,
+  an actual YouTube download with Arabic audio/subtitles, MP4/MKV artwork,
+  cancellation, retries, and Explorer's Open location action.
+- Test installing/restoring a local tool update and replacing an existing active
+  update. Windows file locking and native process cancellation need real OS coverage.
+- Preserve the verified `.tool-cache` when moving machines: BtbN daily assets can
+  expire upstream. Re-pin and retest if an upstream download is removed; never
+  disable checksum verification or silently switch to `latest`.
+
+Known folders are queried via `SHGetKnownFolderPath`; the app writes to
+`%LOCALAPPDATA%/UniversalDownloader`, not the installation directory. Windows
+updates use `runtime-windows-x64.*` and cannot activate a Linux runtime.
+No Windows build, signature, installer, or clean-machine run has been produced
+in this Linux session. The next session on the user's Windows machine should
+start with `PROJECT_STATE.md` and the commands above.
 
 ## Redistribution
 
