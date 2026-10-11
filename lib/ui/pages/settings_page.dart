@@ -9,6 +9,7 @@ import '../../settings/app_settings.dart';
 import '../widgets/app_scaffold.dart';
 import '../widgets/advanced_settings_section.dart';
 import '../widgets/tool_diagnostics.dart';
+import '../widgets/link_cache_settings_card.dart';
 
 /// Settings and dependency status.
 class SettingsPage extends StatefulWidget {
@@ -237,6 +238,12 @@ class _SettingsPageState extends State<SettingsPage> {
                 onSaved: _saveTextFields,
               ),
             ],
+          ),
+          const SizedBox(height: 16),
+          LinkCacheSettingsCard(
+            clearing: controller.clearingLinkCache,
+            message: controller.linkCacheMessage,
+            onClear: controller.clearLinkCache,
           ),
           const SizedBox(height: 16),
           AdvancedSettingsSection(

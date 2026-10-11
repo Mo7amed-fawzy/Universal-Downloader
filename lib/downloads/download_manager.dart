@@ -10,6 +10,7 @@ import '../core/services/log_service.dart';
 import '../providers/downloader_provider.dart';
 import '../providers/provider_registry.dart';
 import 'download_queue.dart';
+import 'download_history.dart';
 import 'download_repository.dart';
 import 'download_task.dart';
 import 'download_task_state.dart';
@@ -23,12 +24,16 @@ class DownloadManager extends ChangeNotifier {
     required this.log,
     DownloadQueue? queue,
     this.publishDownload,
+    this.history,
   }) : queue = queue ?? DownloadQueue();
 
   final ProviderRegistry registry;
   final DownloadRepository repository;
   final LogService log;
   final DownloadQueue queue;
+  final DownloadHistory? history;
+  String? historyError;
+  Future<void> _historyWrites = Future.value();
   final Future<String> Function(DownloadTaskResult, CancelToken)?
   publishDownload;
 
@@ -38,6 +43,33 @@ class DownloadManager extends ChangeNotifier {
   List<DownloadTask> get tasks => queue.tasks;
 
   int get activeCount => _runningIds.length;
+
+  Future<void> restoreHistory() async {
+    final restored = await history?.load() ?? const <DownloadTask>[];
+    for (final task in restored) {
+      if (queue.byId(task.id) == null) queue.add(task);
+    }
+    notifyListeners();
+  }
+
+  Future<void> flushHistory() => _historyWrites;
+
+  Future<bool> _writeHistory(Future<void> Function() write) {
+    final operation = _historyWrites.then((_) async {
+      try {
+        await write();
+        return true;
+      } catch (error) {
+        historyError =
+            'Could not update download history. Check available storage.';
+        log.error('Could not update download history: $error');
+        notifyListeners();
+        return false;
+      }
+    });
+    _historyWrites = operation.then((_) {});
+    return operation;
+  }
 
   /// Queues a new download.
   void add({
@@ -95,7 +127,13 @@ class DownloadManager extends ChangeNotifier {
   }
 
   /// Removes a task from the queue.
-  void remove(String taskId) {
+  Future<void> remove(String taskId) async {
+    final task = queue.byId(taskId);
+    if (task == null || task.state.isActive) return;
+    final store = history;
+    if (store != null && !await _writeHistory(() => store.remove(taskId))) {
+      return;
+    }
     queue.remove(taskId);
     _runningIds.remove(taskId);
     notifyListeners();
@@ -143,6 +181,8 @@ class DownloadManager extends ChangeNotifier {
           await publishDownload?.call(result, task.cancelToken) ??
           result.outputFile.path;
       task.markCompleted(location);
+      final store = history;
+      if (store != null) unawaited(_writeHistory(() => store.save(task)));
     } on DownloadCancelledException {
       task.markCancelled();
       repository.cleanupTaskDirectory(task.id);

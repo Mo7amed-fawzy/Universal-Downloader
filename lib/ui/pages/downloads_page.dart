@@ -4,6 +4,7 @@ import 'package:provider/provider.dart';
 import '../../app/app_controller.dart';
 import '../widgets/app_scaffold.dart';
 import '../widgets/download_tile.dart';
+import '../widgets/downloads_header.dart';
 
 /// Full download queue with per-task state, progress and actions.
 class DownloadsPage extends StatelessWidget {
@@ -21,48 +22,37 @@ class DownloadsPage extends StatelessWidget {
           selectedIndex: 1,
           body: tasks.isEmpty
               ? const _EmptyState()
-              : ListView(
+              : ListView.builder(
                   padding: const EdgeInsets.all(24),
-                  children: [
-                    Row(
-                      children: [
-                        Expanded(
-                          child: Text(
-                            'Downloads',
-                            style: Theme.of(context).textTheme.headlineSmall,
-                          ),
-                        ),
-                        Text(
-                          '${controller.manager.activeCount} active',
-                          style: Theme.of(context).textTheme.bodyMedium,
-                        ),
-                        if (tasks.any((t) => t.state.isTerminal))
-                          TextButton.icon(
-                            onPressed: () => _clearTerminal(controller),
-                            icon: const Icon(Icons.cleaning_services_outlined),
-                            label: const Text('Clear finished'),
-                          ),
-                      ],
-                    ),
-                    const SizedBox(height: 8),
-                    for (final task in tasks) ...[
-                      DownloadTile(task: task),
-                      const SizedBox(height: 8),
-                    ],
-                  ],
+                  itemCount: tasks.length + 1,
+                  itemBuilder: (context, index) {
+                    if (index == 0) {
+                      return DownloadsHeader(
+                        activeCount: controller.manager.activeCount,
+                        canClear: tasks.any((task) => task.state.isTerminal),
+                        onClear: () => _clearTerminal(controller),
+                        historyError: controller.manager.historyError,
+                      );
+                    }
+                    return Padding(
+                      key: ValueKey(tasks[index - 1].id),
+                      padding: const EdgeInsets.only(bottom: 8),
+                      child: DownloadTile(task: tasks[index - 1]),
+                    );
+                  },
                 ),
         );
       },
     );
   }
 
-  void _clearTerminal(AppController controller) {
+  Future<void> _clearTerminal(AppController controller) async {
     final terminal = controller.manager.tasks
         .where((t) => t.state.isTerminal)
         .map((t) => t.id)
         .toList();
     for (final id in terminal) {
-      controller.manager.remove(id);
+      await controller.manager.remove(id);
     }
   }
 }

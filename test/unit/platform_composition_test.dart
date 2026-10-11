@@ -128,7 +128,8 @@ void main() {
       );
     });
 
-    tearDown(() {
+    tearDown(() async {
+      await controller.closeStorage();
       controller.manager.dispose();
       controller.dispose();
       root.deleteSync(recursive: true);
@@ -204,6 +205,29 @@ void main() {
           contains('-show_streams'),
         );
       }, LocalHttpOverrides()),
+    );
+
+    test(
+      'Home fetches reuse cache and settings clear triggers fresh extraction',
+      () async {
+        final youtube = controller.registry.byId('youtube')!;
+        final url = Uri.parse('https://youtu.be/NAEp-qL4VHc');
+        await controller.fetchMediaInfo(youtube, url);
+        expect(platform.runner.calls, hasLength(2));
+        await controller.fetchMediaInfo(youtube, url);
+        expect(platform.runner.calls, hasLength(2));
+        await controller.clearLinkCache();
+        expect(controller.clearingLinkCache, isFalse);
+        expect(controller.linkCacheMessage, 'Link cache cleared.');
+        await controller.fetchMediaInfo(youtube, url);
+        expect(platform.runner.calls, hasLength(4));
+        await controller.updateSettings(
+          controller.settings.copyWith(ytDlpPath: 'custom/yt-dlp'),
+        );
+        await controller.fetchMediaInfo(youtube, url);
+        expect(platform.runner.calls, hasLength(6));
+        expect(platform.runner.calls.last.executable, 'custom/yt-dlp');
+      },
     );
 
     test('settings and tool updates reconfigure existing providers', () async {

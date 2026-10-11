@@ -121,7 +121,7 @@ class _HomePageState extends State<HomePage> {
 
     try {
       controller.log.info('Resolving provider');
-      final info = await provider.fetchInfo(url);
+      final info = await controller.fetchMediaInfo(provider, url);
       if (!mounted) return;
 
       final settings = controller.settings;

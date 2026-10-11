@@ -1,13 +1,21 @@
+import 'dart:async';
+import 'dart:convert';
+
 import 'package:flutter/material.dart';
 
+import '../core/models/media_info.dart';
+import '../core/storage/app_database.dart';
 import '../core/services/dependency_checker.dart';
 import '../core/services/log_service.dart';
 import '../core/utils/path_utils.dart';
 import '../downloads/download_manager.dart';
+import '../downloads/download_history.dart';
 import '../downloads/download_repository.dart';
 import '../platform/download_platform.dart';
 import '../platform/download_platform_factory.dart';
 import '../providers/default_provider_factories.dart';
+import '../providers/downloader_provider.dart';
+import '../providers/media_info_cache.dart';
 import '../providers/provider_dependencies.dart';
 import '../providers/provider_factory.dart';
 import '../providers/provider_registry.dart';
@@ -24,6 +32,8 @@ class AppController extends ChangeNotifier {
     required this.registry,
     required this.manager,
     required this.platform,
+    required this.database,
+    required this.mediaInfoCache,
   });
 
   final LogService log;
@@ -32,6 +42,11 @@ class AppController extends ChangeNotifier {
   final ProviderRegistry registry;
   final DownloadManager manager;
   final DownloadPlatform platform;
+  final AppDatabase database;
+  final MediaInfoCache mediaInfoCache;
+  bool clearingLinkCache = false;
+  String? linkCacheMessage;
+  Future<void>? _storageClose;
   PathUtils get pathUtils => platform.paths;
   bool updatingTools = false;
   String? toolUpdateMessage;
@@ -50,6 +65,7 @@ class AppController extends ChangeNotifier {
   static Future<AppController> create({
     DownloadPlatform? platform,
     Iterable<ProviderFactory> providerFactories = defaultProviderFactories,
+    AppDatabase? database,
   }) async {
     final selectedPlatform =
         platform ?? await const DownloadPlatformFactory().create();
@@ -60,6 +76,7 @@ class AppController extends ChangeNotifier {
       debugEnabled: settings.debugLogging,
     );
     final repository = DownloadRepository(paths: selectedPlatform.paths);
+    final localDatabase = database ?? AppDatabase.open(selectedPlatform.paths);
     final registry = ProviderRegistry.fromFactories(
       factories: providerFactories,
       dependencies: ProviderDependencies(
@@ -73,6 +90,7 @@ class AppController extends ChangeNotifier {
       registry: registry,
       repository: repository,
       log: log,
+      history: DownloadHistory(localDatabase),
       publishDownload: (result, cancelToken) =>
           selectedPlatform.publishDownload(result, cancelToken: cancelToken),
     );
@@ -83,9 +101,56 @@ class AppController extends ChangeNotifier {
       registry: registry,
       manager: manager,
       platform: selectedPlatform,
+      database: localDatabase,
+      mediaInfoCache: MediaInfoCache(database: localDatabase, log: log),
     );
-    await controller.refreshDependencies();
+    try {
+      await manager.restoreHistory();
+      await controller.refreshDependencies();
+    } catch (_) {
+      await localDatabase.close();
+      rethrow;
+    }
     return controller;
+  }
+
+  Future<MediaInfo> fetchMediaInfo(DownloaderProvider provider, Uri url) {
+    final tools = platform.resolveTools(settings);
+    return mediaInfoCache.fetch(
+      provider,
+      url,
+      configuration: jsonEncode([tools.ytDlp, tools.ytDlpArguments]),
+    );
+  }
+
+  Future<void> clearLinkCache() async {
+    if (clearingLinkCache) return;
+    clearingLinkCache = true;
+    linkCacheMessage = null;
+    notifyListeners();
+    try {
+      await mediaInfoCache.clear();
+      linkCacheMessage = 'Link cache cleared.';
+    } catch (error) {
+      log.error('Could not clear link cache: $error');
+      linkCacheMessage = 'Could not clear link cache. Please try again.';
+    } finally {
+      clearingLinkCache = false;
+      notifyListeners();
+    }
+  }
+
+  Future<void> closeStorage() => _storageClose ??= _closeStorage();
+
+  Future<void> _closeStorage() async {
+    await manager.flushHistory();
+    await database.close();
+  }
+
+  @override
+  void dispose() {
+    unawaited(closeStorage());
+    super.dispose();
   }
 
   void _applySettings() {
@@ -151,6 +216,7 @@ class AppController extends ChangeNotifier {
         );
       }
       _applySettings();
+      await mediaInfoCache.clear();
       await refreshDependencies();
     } catch (error) {
       toolUpdateMessage =

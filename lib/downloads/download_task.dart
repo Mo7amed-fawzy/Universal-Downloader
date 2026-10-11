@@ -20,6 +20,19 @@ class DownloadTask extends ChangeNotifier {
     required this.audioLabel,
   });
 
+  DownloadTask.completed({
+    required this.id,
+    required this.media,
+    required this.options,
+    required this.providerId,
+    required this.providerName,
+    required this.videoLabel,
+    required this.audioLabel,
+    required this._outputPath,
+    required this._startedAt,
+    required this._completedAt,
+  }) : _state = DownloadTaskState.completed;
+
   final String id;
   final MediaInfo media;
   final DownloadOptions options;
@@ -78,8 +91,7 @@ class DownloadTask extends ChangeNotifier {
 
   void markFailed(DownloaderException error, {String? technicalDetails}) {
     _error = error;
-    _technicalDetails =
-        technicalDetails ?? error.details ?? (error.message);
+    _technicalDetails = technicalDetails ?? error.details ?? (error.message);
     _state = DownloadTaskState.failed;
     _completedAt = DateTime.now();
     notifyListeners();
