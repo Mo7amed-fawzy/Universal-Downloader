@@ -37,6 +37,40 @@ Map<String, dynamic> format({
 }
 
 void main() {
+  test(
+    'uses reported audio bitrate with audio-only total bitrate fallback',
+    () {
+      final info = mapper.fromJson({
+        'formats': [
+          {
+            ...format(id: 'abr', acodec: 'opus', language: 'ar'),
+            'abr': 137.4,
+            'tbr': 150,
+          },
+          {...format(id: 'tbr', acodec: 'opus', language: 'ar'), 'tbr': 51.3},
+          {
+            ...format(id: 'zero', acodec: 'opus', language: 'ar'),
+            'abr': 0,
+            'tbr': 70,
+          },
+          {
+            ...format(id: 'invalid', acodec: 'opus', language: 'ar'),
+            'abr': -1,
+            'tbr': 0,
+          },
+          {...format(id: 'muxed', vcodec: 'avc1', acodec: 'mp4a'), 'tbr': 900},
+        ],
+      }, pageUrl);
+      expect(info.audioFormats.map((format) => format.bitrate), [
+        137,
+        51,
+        70,
+        null,
+      ]);
+      expect(info.videoFormats.single.formatId, 'muxed');
+    },
+  );
+
   test('maps title, id, duration and page url', () {
     final info = mapper.fromJson({
       'id': 'dQw4w9WgXcQ',
@@ -74,7 +108,13 @@ void main() {
           language: 'ar',
           ext: 'webm',
         ),
-        format(id: 'p1', vcodec: 'avc1', acodec: 'mp4a', width: 640, height: 360),
+        format(
+          id: 'p1',
+          vcodec: 'avc1',
+          acodec: 'mp4a',
+          width: 640,
+          height: 360,
+        ),
       ],
     }, pageUrl);
 
@@ -149,23 +189,33 @@ void main() {
 
       final merged = mapper.mergeM3u8Progressives(info, [
         const M3u8Progressive(
-          formatId: '95-18', ext: 'mp4', language: 'ar',
-          width: 1280, height: 720,
+          formatId: '95-18',
+          ext: 'mp4',
+          language: 'ar',
+          width: 1280,
+          height: 720,
         ),
         const M3u8Progressive(
-          formatId: '96-18', ext: 'mp4', language: 'ar',
-          width: 1920, height: 1080,
+          formatId: '96-18',
+          ext: 'mp4',
+          language: 'ar',
+          width: 1920,
+          height: 1080,
         ),
         const M3u8Progressive(
-          formatId: '93-18', ext: 'mp4', language: 'en',
-          width: 640, height: 360,
+          formatId: '93-18',
+          ext: 'mp4',
+          language: 'en',
+          width: 640,
+          height: 360,
         ),
       ]);
 
       // English already exists via DASH → not duplicated.
       expect(
-        merged.audioFormats
-            .where((f) => f.languageMatches('en') && f.progressiveFormatId != null),
+        merged.audioFormats.where(
+          (f) => f.languageMatches('en') && f.progressiveFormatId != null,
+        ),
         isEmpty,
       );
 
@@ -188,14 +238,19 @@ void main() {
 
       final merged = mapper.mergeM3u8Progressives(info, [
         const M3u8Progressive(
-          formatId: '95-18', ext: 'mp4', language: 'ar',
-          width: 1280, height: 720,
+          formatId: '95-18',
+          ext: 'mp4',
+          language: 'ar',
+          width: 1280,
+          height: 720,
         ),
       ]);
 
       // Arabic already in DASH → no extra progressive entry.
       final arabicProgressive = merged.audioFormats
-          .where((f) => f.languageMatches('ar') && f.progressiveFormatId != null)
+          .where(
+            (f) => f.languageMatches('ar') && f.progressiveFormatId != null,
+          )
           .toList();
       expect(arabicProgressive, isEmpty);
     });

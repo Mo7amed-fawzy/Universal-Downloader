@@ -67,6 +67,29 @@ enum VideoQuality {
 class FormatSelector {
   const FormatSelector();
 
+  List<int> availableAudioBitrates(List<AudioFormat> formats, String language) {
+    return audioForLanguage(formats, language)
+        .map((format) => format.bitrate)
+        .whereType<int>()
+        .where((bitrate) => bitrate > 0)
+        .toSet()
+        .toList()
+      ..sort((a, b) => b.compareTo(a));
+  }
+
+  AudioFormat? selectAudioAtBitrate(
+    List<AudioFormat> formats, {
+    required String language,
+    required int bitrate,
+  }) {
+    if (bitrate <= 0) return null;
+    final matching = audioForLanguage(
+      formats,
+      language,
+    ).where((format) => format.bitrate == bitrate).toList();
+    return matching.isEmpty ? null : _bestOf(matching);
+  }
+
   List<int> availableVideoHeights(List<VideoFormat> formats) {
     return formats
         .where((f) => f.width != null && f.height != null && f.height! > 0)

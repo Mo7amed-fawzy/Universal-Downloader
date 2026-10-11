@@ -202,7 +202,17 @@ class _HomePageState extends State<HomePage> {
           ),
         );
       } else {
-        audio = _pickBitrate(info, language, _input.audioBitrate);
+        final bitrate = _input.audioBitrate;
+        audio = bitrate == null
+            ? _selector.selectBestAudio(
+                info.audioFormats,
+                preferredLanguage: language,
+              )
+            : _selector.selectAudioAtBitrate(
+                info.audioFormats,
+                language: language,
+                bitrate: bitrate,
+              );
       }
 
       if (audio == null) {
@@ -212,8 +222,8 @@ class _HomePageState extends State<HomePage> {
         await showErrorDialog(
           context,
           message:
-              'No ${LanguageNames.nameFor(language)} audio track is '
-              'available for this video.',
+              'The selected ${LanguageNames.nameFor(language)} audio quality '
+              'is unavailable. Fetch info again and select an available quality.',
           details: available.isEmpty
               ? null
               : 'Available audio languages: $available',
@@ -275,20 +285,6 @@ class _HomePageState extends State<HomePage> {
 
   String? _fallbackOrNull(String fallback) =>
       fallback.trim().isEmpty ? null : fallback.trim();
-
-  AudioFormat? _pickBitrate(MediaInfo info, String language, int? bitrate) {
-    final matches = _selector.audioForLanguage(info.audioFormats, language);
-    if (bitrate != null) {
-      for (final f in matches) {
-        if (f.bitrate != null && (f.bitrate! - bitrate).abs() <= 1) {
-          return f;
-        }
-      }
-    }
-    return matches.isEmpty
-        ? null
-        : _selector.selectBestAudio(matches, preferredLanguage: language);
-  }
 
   String _videoLabel(VideoFormat video) {
     final label = video.resolutionLabel;

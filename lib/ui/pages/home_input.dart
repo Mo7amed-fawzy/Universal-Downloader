@@ -29,11 +29,18 @@ class HomeInput {
   void selectAudioLanguage(String? value) {
     audioLanguage = value;
     audioBitrate = null;
+    autoBestAudio = true;
   }
 
-  void selectAutoBestAudio(bool value) => autoBestAudio = value;
+  void selectAutoBestAudio(bool value) {
+    autoBestAudio = value;
+    if (value) audioBitrate = null;
+  }
 
-  void selectAudioBitrate(int? value) => audioBitrate = value;
+  void selectAudioBitrate(int? value) {
+    audioBitrate = value;
+    autoBestAudio = value == null;
+  }
 
   void selectContainer(ContainerPreference value) =>
       containerPreference = value;

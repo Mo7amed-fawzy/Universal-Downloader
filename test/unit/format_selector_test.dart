@@ -48,6 +48,45 @@ VideoFormat video({
 }
 
 void main() {
+  group('manual audio quality', () {
+    final formats = [
+      audio(id: 'near', language: 'ar', bitrate: 127),
+      audio(id: 'aac', language: 'ar', bitrate: 128, codec: 'mp4a'),
+      audio(id: 'opus', language: 'ar', bitrate: 128, codec: 'opus'),
+      audio(id: 'other', language: 'en', bitrate: 320),
+      audio(id: 'unknown', language: 'ar'),
+      audio(id: 'invalid', language: 'ar', bitrate: 0),
+    ];
+
+    test('lists only distinct positive bitrates of the selected language', () {
+      expect(selector.availableAudioBitrates(formats, 'ar'), [128, 127]);
+      expect(selector.availableAudioBitrates(formats, 'en'), [320]);
+      expect(selector.availableAudioBitrates(formats, 'fr'), isEmpty);
+    });
+
+    test('selects the exact bitrate and ranks matching codecs', () {
+      expect(
+        selector
+            .selectAudioAtBitrate(formats, language: 'ar', bitrate: 128)
+            ?.formatId,
+        'opus',
+      );
+    });
+
+    test('does not replace an unavailable bitrate or language', () {
+      for (final bitrate in [0, 126, 129, 320]) {
+        expect(
+          selector.selectAudioAtBitrate(
+            formats,
+            language: 'ar',
+            bitrate: bitrate,
+          ),
+          isNull,
+        );
+      }
+    });
+  });
+
   group('selectBestVideo', () {
     test(
       'offers unique available heights including low and nonstandard ones',

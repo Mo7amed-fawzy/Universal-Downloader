@@ -82,8 +82,7 @@ class YoutubeFormatMapper {
     if (raw is! Map<String, dynamic>) return const [];
     final tracks = <SubtitleTrack>[];
     for (final entry in raw.entries) {
-      if (!RegExp(r'^[a-zA-Z0-9]+(?:[-_][a-zA-Z0-9]+)*$')
-              .hasMatch(entry.key) ||
+      if (!RegExp(r'^[a-zA-Z0-9]+(?:[-_][a-zA-Z0-9]+)*$').hasMatch(entry.key) ||
           entry.key == 'live_chat') {
         continue;
       }
@@ -100,17 +99,24 @@ class YoutubeFormatMapper {
         });
         if (matches.isEmpty) continue;
         final name = matches.first['name'];
-        tracks.add(SubtitleTrack(
-          language: entry.key,
-          extension: extension,
-          name: name is String && name.trim().isNotEmpty ? name : null,
-          isAutomatic: isAutomatic,
-          isTranslated: isAutomatic && matches.any((format) {
-            final url = format['url'];
-            return url is String &&
-                (Uri.tryParse(url)?.queryParameters['tlang']?.isNotEmpty ?? false);
-          }),
-        ));
+        tracks.add(
+          SubtitleTrack(
+            language: entry.key,
+            extension: extension,
+            name: name is String && name.trim().isNotEmpty ? name : null,
+            isAutomatic: isAutomatic,
+            isTranslated:
+                isAutomatic &&
+                matches.any((format) {
+                  final url = format['url'];
+                  return url is String &&
+                      (Uri.tryParse(
+                            url,
+                          )?.queryParameters['tlang']?.isNotEmpty ??
+                          false);
+                }),
+          ),
+        );
         break;
       }
     }
@@ -145,7 +151,7 @@ class YoutubeFormatMapper {
       formatId: formatId,
       language: language,
       languageName: null,
-      bitrate: _toInt(raw['abr']),
+      bitrate: _positiveInt(raw['abr']) ?? _positiveInt(raw['tbr']),
       sampleRate: _toInt(raw['asr']),
       codec: raw['acodec'] as String?,
       container: raw['ext'] as String?,
@@ -156,6 +162,12 @@ class YoutubeFormatMapper {
   static int? _toInt(Object? value) {
     if (value is num) return value.round();
     return null;
+  }
+
+  static int? _positiveInt(Object? value) {
+    if (value is! num || !value.isFinite || value <= 0) return null;
+    final rounded = value.round();
+    return rounded > 0 ? rounded : null;
   }
 
   static Uri? _parseUri(String? value) {
@@ -206,17 +218,19 @@ class YoutubeFormatMapper {
       if (dashLanguages.contains(baseLang)) continue;
       if (!seenLangs.add(baseLang)) continue;
 
-      extraAudio.add(AudioFormat(
-        formatId: 'm3u8-${p.formatId}',
-        language: p.language,
-        languageName: null,
-        bitrate: null,
-        sampleRate: null,
-        codec: p.ext == 'mp4' ? 'mp4a.40.2' : 'opus',
-        container: p.ext,
-        filesize: null,
-        progressiveFormatId: p.formatId,
-      ));
+      extraAudio.add(
+        AudioFormat(
+          formatId: 'm3u8-${p.formatId}',
+          language: p.language,
+          languageName: null,
+          bitrate: null,
+          sampleRate: null,
+          codec: p.ext == 'mp4' ? 'mp4a.40.2' : 'opus',
+          container: p.ext,
+          filesize: null,
+          progressiveFormatId: p.formatId,
+        ),
+      );
     }
 
     if (extraAudio.isEmpty) return info;

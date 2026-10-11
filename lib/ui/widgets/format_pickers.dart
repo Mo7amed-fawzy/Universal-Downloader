@@ -1,6 +1,5 @@
 import 'package:flutter/material.dart';
 
-import '../../core/models/audio_format.dart';
 import '../../core/models/download_options.dart';
 import '../../core/models/media_info.dart';
 import '../../core/utils/language_names.dart';
@@ -8,6 +7,7 @@ import '../../providers/format_selector.dart';
 import '../components/status_chip.dart';
 import '../pages/home_input.dart';
 import 'subtitle_picker.dart';
+import 'audio_quality_dropdown.dart';
 
 /// Provider-agnostic format selection controls: video quality, audio language
 /// + bitrate, and container preference.
@@ -123,18 +123,16 @@ class FormatSelectionCard extends StatelessWidget {
                   ),
                 ],
               ),
-              if (!input.autoBestAudio) ...[
-                const SizedBox(height: 8),
-                _AudioBitrateDropdown(
-                  info: info,
-                  language: input.audioLanguage,
-                  selected: input.audioBitrate,
-                  onChanged: (v) {
-                    input.selectAudioBitrate(v);
-                    onChanged();
-                  },
-                ),
-              ],
+              const SizedBox(height: 8),
+              AudioQualityDropdown(
+                info: info,
+                language: input.audioLanguage,
+                selected: input.autoBestAudio ? null : input.audioBitrate,
+                onChanged: (v) {
+                  input.selectAudioBitrate(v);
+                  onChanged();
+                },
+              ),
             ],
             const Divider(height: 32),
             SubtitlePicker(
@@ -170,46 +168,5 @@ class FormatSelectionCard extends StatelessWidget {
     final isPreferred = base == prefBase;
     return '${LanguageNames.nameFor(code)} '
         '${isPreferred ? ' (preferred)' : ''}';
-  }
-}
-
-class _AudioBitrateDropdown extends StatelessWidget {
-  const _AudioBitrateDropdown({
-    required this.info,
-    required this.language,
-    required this.selected,
-    required this.onChanged,
-  });
-
-  final MediaInfo info;
-  final String? language;
-  final int? selected;
-  final ValueChanged<int?> onChanged;
-
-  @override
-  Widget build(BuildContext context) {
-    const selector = FormatSelector();
-    final formats = language == null
-        ? const <AudioFormat>[]
-        : selector.audioForLanguage(info.audioFormats, language!);
-    final bitrates =
-        formats.map((f) => f.bitrate).whereType<int>().toSet().toList()
-          ..sort((a, b) => b.compareTo(a));
-
-    if (bitrates.isEmpty) return const SizedBox.shrink();
-
-    return DropdownButtonFormField<int?>(
-      initialValue: selected,
-      decoration: const InputDecoration(labelText: 'Quality'),
-      items: [
-        const DropdownMenuItem<int?>(
-          value: null,
-          child: Text('Best Available'),
-        ),
-        for (final bitrate in bitrates)
-          DropdownMenuItem<int?>(value: bitrate, child: Text('$bitrate kbps')),
-      ],
-      onChanged: onChanged,
-    );
   }
 }

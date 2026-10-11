@@ -2,6 +2,7 @@ import 'dart:convert';
 import 'dart:io';
 
 import '../../core/errors/downloader_exceptions.dart';
+import '../../core/models/audio_format.dart';
 import '../../core/models/download_options.dart';
 import '../../core/models/media_info.dart';
 import '../../core/process/cancel_token.dart';
@@ -270,6 +271,7 @@ class YoutubeProvider implements DownloaderProvider, ToolConfigurableProvider {
             url: media.pageUrl,
             originalFormatId: audioFormatId,
             targetLanguage: options.audioLanguage,
+            targetAudio: audioFormat,
             isVideo: false,
           );
           if (remappedId == null || remappedId == audioFormatId) rethrow;
@@ -462,6 +464,7 @@ class YoutubeProvider implements DownloaderProvider, ToolConfigurableProvider {
     required String originalFormatId,
     int? targetHeight,
     String? targetLanguage,
+    AudioFormat? targetAudio,
     required bool isVideo,
   }) async {
     try {
@@ -478,6 +481,24 @@ class YoutubeProvider implements DownloaderProvider, ToolConfigurableProvider {
       if (!result.success) return null;
 
       final json = jsonDecode(result.stdout) as Map<String, dynamic>;
+      if (!isVideo) {
+        final refreshed = const YoutubeFormatMapper().fromJson(json, url);
+        for (final format in refreshed.audioFormats) {
+          if (format.formatId == originalFormatId) continue;
+          if (targetLanguage != null &&
+              !format.languageMatches(targetLanguage)) {
+            continue;
+          }
+          if (targetAudio != null &&
+              (format.bitrate != targetAudio.bitrate ||
+                  format.codec != targetAudio.codec ||
+                  format.sampleRate != targetAudio.sampleRate)) {
+            continue;
+          }
+          return format.formatId;
+        }
+        return null;
+      }
       final formats = json['formats'] as List<dynamic>? ?? const [];
 
       for (final f in formats) {
@@ -485,24 +506,12 @@ class YoutubeProvider implements DownloaderProvider, ToolConfigurableProvider {
         final fid = f['format_id'] as String?;
         if (fid == null || fid == originalFormatId) continue;
 
-        if (isVideo) {
-          final height = f['height'] as int?;
-          final vcodec = f['vcodec'] as String? ?? 'none';
-          final acodec = f['acodec'] as String? ?? 'none';
-          if (vcodec == 'none' || acodec != 'none') continue;
-          if (targetHeight != null && height != targetHeight) continue;
-          return fid;
-        } else {
-          final lang = (f['language'] ?? '').toString();
-          final vcodec = f['vcodec'] as String? ?? 'none';
-          final acodec = f['acodec'] as String? ?? 'none';
-          if (vcodec != 'none' || acodec == 'none') continue;
-          if (targetLanguage != null &&
-              !lang.startsWith(targetLanguage.split('-').first)) {
-            continue;
-          }
-          return fid;
-        }
+        final height = f['height'] as int?;
+        final vcodec = f['vcodec'] as String? ?? 'none';
+        final acodec = f['acodec'] as String? ?? 'none';
+        if (vcodec == 'none' || acodec != 'none') continue;
+        if (targetHeight != null && height != targetHeight) continue;
+        return fid;
       }
     } catch (_) {}
     return null;

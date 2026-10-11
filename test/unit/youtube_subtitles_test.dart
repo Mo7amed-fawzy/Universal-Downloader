@@ -1,3 +1,4 @@
+import 'dart:convert';
 import 'dart:io';
 
 import 'package:flutter_test/flutter_test.dart';
@@ -192,6 +193,8 @@ void main() {
             AudioFormat(
               formatId: 'audio',
               codec: 'mp4a',
+              bitrate: 128,
+              sampleRate: 44100,
               language: 'ar',
               progressiveFormatId: hls ? 'hls-stream' : null,
             ),
@@ -213,6 +216,44 @@ void main() {
       );
       return result.outputFile;
     }
+
+    test(
+      'audio retry keeps the selected language, bitrate and codec',
+      () async {
+        runner.failAudio = true;
+        runner.refreshedAudio = [
+          {'format_id': 'low', 'language': 'ar', 'abr': 64},
+          {'format_id': 'other-language', 'language': 'en', 'abr': 128},
+          {
+            'format_id': 'other-codec',
+            'language': 'ar',
+            'abr': 128,
+            'acodec': 'opus',
+          },
+          {'format_id': 'same-quality', 'language': 'ar', 'abr': 128},
+        ];
+        final output = await download(separateAudio: true);
+        expect(output.existsSync(), isTrue);
+        final audioCalls = runner.calls.where((args) => args.contains('-f'));
+        expect(audioCalls.map((args) => args[args.indexOf('-f') + 1]), [
+          'video',
+          'audio',
+          'same-quality',
+        ]);
+      },
+    );
+
+    test('audio retry fails instead of silently changing quality', () async {
+      runner.failAudio = true;
+      runner.refreshedAudio = [
+        {'format_id': 'low', 'language': 'ar', 'abr': 64},
+      ];
+      await expectLater(
+        download(separateAudio: true),
+        throwsA(isA<DownloadFailedException>()),
+      );
+      expect(runner.calls.any((args) => args.contains('low')), isFalse);
+    });
 
     test('None downloads no subtitles, overriding subtitle extras', () async {
       provider.setExtraYtDlpArgs('--write-subs --write-auto-subs --embed-subs');
@@ -447,6 +488,8 @@ class SubtitleProcessRunner extends ProcessRunner {
   String? subtitleFailure;
   bool cancelSubtitles = false;
   bool verificationFails = false;
+  bool failAudio = false;
+  List<Map<String, Object>> refreshedAudio = [];
   int videoHeight = 720;
 
   @override
@@ -459,6 +502,27 @@ class SubtitleProcessRunner extends ProcessRunner {
     String? workingDirectory,
   }) async {
     calls.add(arguments);
+    if (arguments.contains('--dump-single-json')) {
+      return ProcessRunnerResult(
+        exitCode: 0,
+        stdout: jsonEncode({
+          'formats': [
+            for (final format in refreshedAudio)
+              {'vcodec': 'none', 'acodec': 'mp4a', 'asr': 44100, ...format},
+          ],
+        }),
+        stderr: '',
+      );
+    }
+    if (failAudio &&
+        arguments.contains('-f') &&
+        arguments[arguments.indexOf('-f') + 1] == 'audio') {
+      return const ProcessRunnerResult(
+        exitCode: 1,
+        stdout: '',
+        stderr: 'expired',
+      );
+    }
     if (arguments.contains('--sub-langs')) {
       if (cancelSubtitles) cancelToken!.cancel();
       cancelToken?.throwIfCancelled();
