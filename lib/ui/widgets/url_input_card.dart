@@ -42,10 +42,28 @@ class UrlInputCard extends StatelessWidget {
                   decoration: InputDecoration(
                     hintText: 'https://www.youtube.com/watch?v=...',
                     prefixIcon: const Icon(Icons.link),
-                    suffixIcon: IconButton(
-                      tooltip: 'Paste from clipboard',
-                      icon: const Icon(Icons.content_paste),
-                      onPressed: _pasteFromClipboard,
+                    suffixIcon: ValueListenableBuilder<TextEditingValue>(
+                      valueListenable: controller,
+                      builder: (context, value, child) => Row(
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          if (value.text.isNotEmpty)
+                            IconButton(
+                              tooltip: 'Clear URL',
+                              icon: const Icon(Icons.close, size: 20),
+                              onPressed: () {
+                                controller.clear();
+                                focusNode.requestFocus();
+                              },
+                            ),
+                          child!,
+                        ],
+                      ),
+                      child: IconButton(
+                        tooltip: 'Paste from clipboard',
+                        icon: const Icon(Icons.content_paste),
+                        onPressed: _pasteFromClipboard,
+                      ),
                     ),
                   ),
                 );
