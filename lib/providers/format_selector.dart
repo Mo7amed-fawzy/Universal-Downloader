@@ -9,7 +9,9 @@ enum VideoQuality {
   q1080,
   q720,
   q480,
-  q360;
+  q360,
+  q240,
+  q144;
 
   int? get maxHeight {
     switch (this) {
@@ -27,6 +29,10 @@ enum VideoQuality {
         return 480;
       case VideoQuality.q360:
         return 360;
+      case VideoQuality.q240:
+        return 240;
+      case VideoQuality.q144:
+        return 144;
     }
   }
 
@@ -46,6 +52,10 @@ enum VideoQuality {
         return '480p';
       case VideoQuality.q360:
         return '360p';
+      case VideoQuality.q240:
+        return '240p';
+      case VideoQuality.q144:
+        return '144p';
     }
   }
 }
@@ -57,10 +67,19 @@ enum VideoQuality {
 class FormatSelector {
   const FormatSelector();
 
+  List<int> availableVideoHeights(List<VideoFormat> formats) {
+    return formats
+        .where((f) => f.width != null && f.height != null && f.height! > 0)
+        .map((f) => f.height!)
+        .toSet()
+        .toList()
+      ..sort((a, b) => b.compareTo(a));
+  }
+
   /// Selects the best video format for [quality].
   ///
-  /// * For `best`: the highest-quality video-only (DASH) stream, falling back
-  ///   to progressive streams.
+  /// * For `best`: the highest available resolution, preferring video-only
+  ///   (DASH) streams at that resolution.
   /// * For a capped quality: the best stream at or below the requested height;
   ///   if nothing is that tall, the lowest available is returned.
   ///
@@ -69,6 +88,7 @@ class FormatSelector {
   VideoFormat? selectBestVideo(
     List<VideoFormat> formats, {
     VideoQuality quality = VideoQuality.best,
+    int? maxHeight,
   }) {
     final video = formats
         .where((f) => f.width != null && f.height != null && f.height! > 0)
@@ -76,21 +96,26 @@ class FormatSelector {
     if (video.isEmpty) return null;
 
     final capped = <VideoFormat>[];
-    final maxHeight = quality.maxHeight;
-    if (maxHeight != null) {
-      capped.addAll(video.where((f) => f.height! <= maxHeight));
+    final heightLimit = maxHeight ?? quality.maxHeight;
+    if (heightLimit != null) {
+      capped.addAll(video.where((f) => f.height! <= heightLimit));
     }
 
     final candidates = capped.isNotEmpty
         ? capped
-        : (maxHeight == null ? video : _lowestAvailable(video));
+        : (heightLimit == null ? video : _lowestAvailable(video));
+
+    final highestHeight = candidates
+        .map((f) => f.height!)
+        .reduce((a, b) => a > b ? a : b);
+    final highest = candidates.where((f) => f.height == highestHeight).toList();
 
     // Prefer video-only streams (DASH) for the highest quality source.
-    final videoOnly = candidates.where((f) => f.videoOnly).toList();
-    final progressive = candidates.where((f) => f.hasAudio).toList();
+    final videoOnly = highest.where((f) => f.videoOnly).toList();
+    final progressive = highest.where((f) => f.hasAudio).toList();
     final pool = videoOnly.isNotEmpty
         ? videoOnly
-        : (progressive.isNotEmpty ? progressive : candidates);
+        : (progressive.isNotEmpty ? progressive : highest);
 
     pool.sort((a, b) => b.qualityRank.compareTo(a.qualityRank));
     return pool.first;
@@ -145,10 +170,7 @@ class FormatSelector {
     return _matching(formats, languageCode);
   }
 
-  List<AudioFormat> _matching(
-    List<AudioFormat> formats,
-    String languageCode,
-  ) {
+  List<AudioFormat> _matching(List<AudioFormat> formats, String languageCode) {
     return formats
         .where((f) => f.language != null && f.languageMatches(languageCode))
         .toList();

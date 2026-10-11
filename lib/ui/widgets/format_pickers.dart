@@ -31,6 +31,9 @@ class FormatSelectionCard extends StatelessWidget {
     final theme = Theme.of(context);
     final languages = info.audioLanguages;
     final hasAudio = languages.isNotEmpty;
+    final heights = const FormatSelector().availableVideoHeights(
+      info.videoFormats,
+    );
 
     return Card(
       child: Padding(
@@ -40,24 +43,21 @@ class FormatSelectionCard extends StatelessWidget {
           children: [
             Text('Video Quality', style: theme.textTheme.titleMedium),
             const SizedBox(height: 8),
-            DropdownButtonFormField<VideoQuality>(
+            DropdownButtonFormField<int>(
+              key: ValueKey((info, input.videoHeight)),
               isExpanded: true,
-              initialValue: input.videoQuality,
-              items: VideoQuality.values
-                  .map(
-                    (q) => DropdownMenuItem(
-                      value: q,
-                      child: Text(
-                        q == VideoQuality.best
-                            ? 'Auto / Best Available'
-                            : q.label,
-                      ),
-                    ),
-                  )
-                  .toList(),
+              initialValue: input.videoHeight ?? 0,
+              items: [
+                const DropdownMenuItem(
+                  value: 0,
+                  child: Text('Auto / Best Available'),
+                ),
+                for (final height in heights)
+                  DropdownMenuItem(value: height, child: Text('${height}p')),
+              ],
               onChanged: (v) {
                 if (v == null) return;
-                input.selectVideoQuality(v);
+                input.selectVideoHeight(v == 0 ? null : v);
                 onChanged();
               },
             ),

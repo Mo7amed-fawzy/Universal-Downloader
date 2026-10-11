@@ -155,9 +155,7 @@ class YoutubeProvider implements DownloaderProvider, ToolConfigurableProvider {
         : null;
     final progressiveId = audioFormat?.progressiveFormatId;
 
-    final videoFormat = progressiveId != null
-        ? null
-        : media.videoFormatById(options.videoFormatId);
+    final videoFormat = media.videoFormatById(options.videoFormatId);
 
     File? audioTmp;
     try {
@@ -205,100 +203,85 @@ class YoutubeProvider implements DownloaderProvider, ToolConfigurableProvider {
                   onPhase(DownloadTaskState.downloadingSubtitles),
             );
       }
-      if (progressiveId != null) {
-        // m3u8 progressive: download the muxed stream directly as video.
-        // Use tv_embedded — the same client that discovered these streams.
-        cancelToken.throwIfCancelled();
-        onPhase(DownloadTaskState.downloadingVideo);
-        _log.info(
-          'Downloading m3u8 progressive stream $progressiveId '
-          '(video+audio muxed)',
-        );
+      // Download the selected video and audio sources separately, then merge.
+      final videoArgs = YoutubeExtractor.downloadBaseArgs();
+      final audioArgs = progressiveId != null
+          ? YoutubeExtractor.hlsDownloadBaseArgs()
+          : YoutubeExtractor.downloadAudioBaseArgs();
+
+      // 1. Download the selected video stream.
+      cancelToken.throwIfCancelled();
+      onPhase(DownloadTaskState.downloadingVideo);
+      _log.info('Downloading video stream ${options.videoFormatId}');
+      try {
         await _downloadStream(
           media.pageUrl,
-          progressiveId,
+          options.videoFormatId,
           videoTmp,
           cancelToken,
           onProgress,
-          extractorArgs: YoutubeExtractor.hlsDownloadBaseArgs(),
+          extractorArgs: videoArgs,
         );
-      } else {
-        // DASH: download video + audio separately, then merge.
-        final videoArgs = YoutubeExtractor.downloadBaseArgs();
-        final audioArgs = YoutubeExtractor.downloadAudioBaseArgs();
+      } on DownloadFailedException catch (e) {
+        // Fallback: refresh metadata with download config and remap.
+        _log.info('Video download failed, attempting format remap: $e');
+        final remappedId = await _remapFormatId(
+          url: media.pageUrl,
+          originalFormatId: options.videoFormatId,
+          targetHeight: videoFormat?.height,
+          isVideo: true,
+        );
+        if (remappedId == null || remappedId == options.videoFormatId) {
+          rethrow;
+        }
+        _log.info(
+          'Remapped video format ${options.videoFormatId} → $remappedId',
+        );
+        await _downloadStream(
+          media.pageUrl,
+          remappedId,
+          videoTmp,
+          cancelToken,
+          onProgress,
+          extractorArgs: videoArgs,
+        );
+      }
 
-        // 1. Download the selected video stream.
+      // 2. Download the selected audio stream.
+      if (audioFormatId != null) {
         cancelToken.throwIfCancelled();
-        onPhase(DownloadTaskState.downloadingVideo);
-        _log.info('Downloading video stream ${options.videoFormatId}');
+        onPhase(DownloadTaskState.downloadingAudio);
+        final sourceAudioId = progressiveId ?? audioFormatId;
+        _log.info('Downloading audio stream $sourceAudioId');
+        audioTmp = File('${tempDir.path}/audio.tmp');
         try {
           await _downloadStream(
             media.pageUrl,
-            options.videoFormatId,
-            videoTmp,
+            sourceAudioId,
+            audioTmp,
             cancelToken,
             onProgress,
-            extractorArgs: videoArgs,
+            extractorArgs: audioArgs,
           );
         } on DownloadFailedException catch (e) {
-          // Fallback: refresh metadata with download config and remap.
-          _log.info('Video download failed, attempting format remap: $e');
+          if (progressiveId != null) rethrow;
+          _log.info('Audio download failed, attempting format remap: $e');
           final remappedId = await _remapFormatId(
             url: media.pageUrl,
-            originalFormatId: options.videoFormatId,
-            targetHeight: videoFormat?.height,
-            isVideo: true,
+            originalFormatId: audioFormatId,
+            targetLanguage: options.audioLanguage,
+            isVideo: false,
           );
-          if (remappedId == null || remappedId == options.videoFormatId) {
-            rethrow;
-          }
-          _log.info(
-            'Remapped video format ${options.videoFormatId} → $remappedId',
-          );
+          if (remappedId == null || remappedId == audioFormatId) rethrow;
+          _log.info('Remapped audio format $audioFormatId → $remappedId');
           await _downloadStream(
             media.pageUrl,
             remappedId,
-            videoTmp,
+            audioTmp,
             cancelToken,
             onProgress,
-            extractorArgs: videoArgs,
+            extractorArgs: audioArgs,
           );
-        }
-
-        // 2. Download the selected audio stream.
-        if (audioFormatId != null) {
-          cancelToken.throwIfCancelled();
-          onPhase(DownloadTaskState.downloadingAudio);
-          _log.info('Downloading audio stream $audioFormatId');
-          audioTmp = File('${tempDir.path}/audio.tmp');
-          try {
-            await _downloadStream(
-              media.pageUrl,
-              audioFormatId,
-              audioTmp,
-              cancelToken,
-              onProgress,
-              extractorArgs: audioArgs,
-            );
-          } on DownloadFailedException catch (e) {
-            _log.info('Audio download failed, attempting format remap: $e');
-            final remappedId = await _remapFormatId(
-              url: media.pageUrl,
-              originalFormatId: audioFormatId,
-              targetLanguage: options.audioLanguage,
-              isVideo: false,
-            );
-            if (remappedId == null || remappedId == audioFormatId) rethrow;
-            _log.info('Remapped audio format $audioFormatId → $remappedId');
-            await _downloadStream(
-              media.pageUrl,
-              remappedId,
-              audioTmp,
-              cancelToken,
-              onProgress,
-              extractorArgs: audioArgs,
-            );
-          }
         }
       }
 

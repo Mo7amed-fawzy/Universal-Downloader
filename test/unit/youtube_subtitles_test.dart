@@ -167,6 +167,7 @@ void main() {
       bool hls = false,
       bool cover = false,
       String container = 'mp4',
+      int videoHeight = 720,
       CancelToken? token,
     }) async {
       final result = await provider.download(
@@ -182,7 +183,7 @@ void main() {
               formatId: 'video',
               container: container,
               codec: 'avc1',
-              height: 720,
+              height: videoHeight,
               videoOnly: separateAudio,
               hasAudio: !separateAudio,
             ),
@@ -333,12 +334,40 @@ void main() {
       });
     }
 
-    test('also saves selected subtitles for HLS combined streams', () async {
-      await download(subtitle: automatic, hls: true);
-      expect(File('${root.path}/Video.ar.vtt').existsSync(), isTrue);
-      expect(runner.calls[1], contains('hls-stream'));
-      expect(phases, isNot(contains(DownloadTaskState.merging)));
-    });
+    for (final height in [144, 240, 720]) {
+      test(
+        'HLS audio preserves selected ${height}p video and subtitles',
+        () async {
+          runner.videoHeight = height;
+          await download(subtitle: automatic, hls: true, videoHeight: height);
+          expect(File('${root.path}/Video.ar.vtt').existsSync(), isTrue);
+          final streams = runner.calls
+              .where((args) => args.contains('-f'))
+              .toList();
+          expect(streams.map((args) => args[args.indexOf('-f') + 1]), [
+            'video',
+            'hls-stream',
+          ]);
+          expect(streams.last, contains('youtube:player_client=tv_embedded'));
+          final merge = runner.calls.singleWhere(
+            (args) => args.contains('-map'),
+          );
+          expect(merge, containsAllInOrder(['-map', '0:V:0', '-map', '1:a:0']));
+          expect(merge, containsAllInOrder(['-c', 'copy']));
+          expect(phases, contains(DownloadTaskState.merging));
+        },
+      );
+    }
+
+    test(
+      'HLS audio no longer bypasses selected video height verification',
+      () async {
+        await expectLater(
+          download(hls: true, videoHeight: 144),
+          throwsA(isA<VerificationException>()),
+        );
+      },
+    );
 
     for (final mode in ['error', 'missing', 'empty']) {
       test(
@@ -418,6 +447,7 @@ class SubtitleProcessRunner extends ProcessRunner {
   String? subtitleFailure;
   bool cancelSubtitles = false;
   bool verificationFails = false;
+  int videoHeight = 720;
 
   @override
   Future<ProcessRunnerResult> run({
@@ -467,7 +497,7 @@ class SubtitleProcessRunner extends ProcessRunner {
       return ProcessRunnerResult(
         exitCode: verificationFails ? 1 : 0,
         stdout:
-            '{"streams":[{"codec_type":"video","height":720},{"codec_type":"audio","tags":{"language":"ar"}}'
+            '{"streams":[{"codec_type":"video","height":$videoHeight},{"codec_type":"audio","tags":{"language":"ar"}}'
             '${hasCover ? ',{"codec_type":"video","height":1080,"disposition":{"attached_pic":1}}' : ''}],"format":{"size":100}}',
         stderr: '',
       );

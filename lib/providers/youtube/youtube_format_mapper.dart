@@ -169,8 +169,7 @@ class YoutubeFormatMapper {
   /// For each progressive stream whose language is NOT already present in
   /// [info.audioFormats], a synthetic [AudioFormat] is created with
   /// [AudioFormat.progressiveFormatId] set to the progressive stream's
-  /// format id.  The download layer knows to fetch this single muxed
-  /// stream instead of separate video + audio.
+  /// format id. The download layer uses its audio with the selected video.
   MediaInfo mergeM3u8Progressives(
     MediaInfo info,
     List<M3u8Progressive> progressives,

@@ -54,7 +54,6 @@ class _HomePageState extends State<HomePage> {
     );
     final settings = context.read<AppController>().settings;
     _input.selectAutoBestAudio(settings.autoSelectBestAudio);
-    _input.selectVideoQuality(settings.defaultVideoQuality);
     _input.selectContainer(settings.containerPreference);
   }
 
@@ -133,7 +132,10 @@ class _HomePageState extends State<HomePage> {
         _info = info;
         _input.selectAudioLanguage(preferred);
         _input.selectAutoBestAudio(settings.autoSelectBestAudio);
-        _input.selectVideoQuality(settings.defaultVideoQuality);
+        _input.resetVideoQuality(
+          info.videoFormats,
+          settings.defaultVideoQuality,
+        );
         _input.selectContainer(settings.containerPreference);
       });
 
@@ -174,7 +176,7 @@ class _HomePageState extends State<HomePage> {
 
     final video = _selector.selectBestVideo(
       info.videoFormats,
-      quality: _input.videoQuality,
+      maxHeight: _input.videoHeight,
     );
     if (video == null) {
       await showErrorDialog(

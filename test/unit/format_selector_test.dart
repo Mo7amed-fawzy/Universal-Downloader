@@ -49,6 +49,51 @@ VideoFormat video({
 
 void main() {
   group('selectBestVideo', () {
+    test(
+      'offers unique available heights including low and nonstandard ones',
+      () {
+        final formats = [
+          video(id: '720', width: 1280, height: 720, videoOnly: true),
+          video(id: '720-copy', width: 1280, height: 720, hasAudio: true),
+          video(id: '240', width: 426, height: 240, videoOnly: true),
+          video(id: '144', width: 256, height: 144, videoOnly: true),
+          video(id: '180', width: 320, height: 180, videoOnly: true),
+          video(id: 'unknown'),
+          video(id: 'invalid', width: 640, height: 0),
+        ];
+        expect(selector.availableVideoHeights(formats), [720, 240, 180, 144]);
+        for (final height in [240, 180, 144]) {
+          expect(
+            selector.selectBestVideo(formats, maxHeight: height)?.height,
+            height,
+          );
+        }
+        expect(
+          selector.selectBestVideo(formats, quality: VideoQuality.q240)?.height,
+          240,
+        );
+        expect(
+          selector.selectBestVideo(formats, quality: VideoQuality.q144)?.height,
+          144,
+        );
+      },
+    );
+
+    test(
+      'does not replace the selected progressive height with lower DASH',
+      () {
+        final formats = [
+          video(id: 'dash', width: 256, height: 144, videoOnly: true),
+          video(id: 'progressive', width: 426, height: 240, hasAudio: true),
+        ];
+        expect(selector.selectBestVideo(formats)?.formatId, 'progressive');
+        expect(
+          selector.selectBestVideo(formats, maxHeight: 240)?.formatId,
+          'progressive',
+        );
+      },
+    );
+
     test('picks the highest resolution video-only stream for best', () {
       final formats = [
         video(id: 'v360', width: 640, height: 360, videoOnly: true),
@@ -73,9 +118,7 @@ void main() {
         video(id: 'v1080', width: 1920, height: 1080, videoOnly: true),
       ];
       expect(
-        selector
-            .selectBestVideo(formats, quality: VideoQuality.q720)
-            ?.formatId,
+        selector.selectBestVideo(formats, quality: VideoQuality.q720)?.formatId,
         'v720',
       );
       expect(
@@ -110,8 +153,10 @@ void main() {
         audio(id: 'ar1', language: 'ar-EG', bitrate: 96),
         audio(id: 'ar2', language: 'ar', bitrate: 128),
       ];
-      expect(selector.selectBestAudio(formats, preferredLanguage: 'ar')?.formatId,
-          'ar2');
+      expect(
+        selector.selectBestAudio(formats, preferredLanguage: 'ar')?.formatId,
+        'ar2',
+      );
     });
 
     test('ranks by bitrate within the matched language', () {
@@ -120,8 +165,10 @@ void main() {
         audio(id: 'high', language: 'ar', bitrate: 192),
         audio(id: 'mid', language: 'ar', bitrate: 128),
       ];
-      expect(selector.selectBestAudio(formats, preferredLanguage: 'ar')?.formatId,
-          'high');
+      expect(
+        selector.selectBestAudio(formats, preferredLanguage: 'ar')?.formatId,
+        'high',
+      );
     });
 
     test('breaks bitrate ties by sample rate', () {
@@ -129,8 +176,10 @@ void main() {
         audio(id: 'low48', language: 'ar', bitrate: 128, sampleRate: 44100),
         audio(id: 'high48', language: 'ar', bitrate: 128, sampleRate: 48000),
       ];
-      expect(selector.selectBestAudio(formats, preferredLanguage: 'ar')?.formatId,
-          'high48');
+      expect(
+        selector.selectBestAudio(formats, preferredLanguage: 'ar')?.formatId,
+        'high48',
+      );
     });
 
     test('returns null when the language is unavailable and no fallback', () {
@@ -147,11 +196,13 @@ void main() {
         audio(id: 'fr', language: 'fr', bitrate: 192),
       ];
       expect(
-        selector.selectBestAudio(
-          formats,
-          preferredLanguage: 'ar',
-          fallbackLanguage: 'en',
-        )?.formatId,
+        selector
+            .selectBestAudio(
+              formats,
+              preferredLanguage: 'ar',
+              fallbackLanguage: 'en',
+            )
+            ?.formatId,
         'en',
       );
     });
@@ -162,11 +213,13 @@ void main() {
         audio(id: 'fr', language: 'fr', bitrate: 256),
       ];
       expect(
-        selector.selectBestAudio(
-          formats,
-          preferredLanguage: 'ar',
-          allowOtherLanguages: true,
-        )?.formatId,
+        selector
+            .selectBestAudio(
+              formats,
+              preferredLanguage: 'ar',
+              allowOtherLanguages: true,
+            )
+            ?.formatId,
         'fr',
       );
     });
@@ -186,8 +239,10 @@ void main() {
         audio(id: 'ar-eg', language: 'ar-EG'),
         audio(id: 'en', language: 'en'),
       ];
-      expect(selector.audioForLanguage(formats, 'ar').map((f) => f.formatId),
-          ['ar1', 'ar-eg']);
+      expect(selector.audioForLanguage(formats, 'ar').map((f) => f.formatId), [
+        'ar1',
+        'ar-eg',
+      ]);
     });
   });
 

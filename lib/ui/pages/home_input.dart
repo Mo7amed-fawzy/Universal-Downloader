@@ -1,9 +1,10 @@
 import '../../core/models/download_options.dart';
 import '../../core/models/subtitle_track.dart';
+import '../../core/models/video_format.dart';
 import '../../providers/format_selector.dart';
 
 class HomeInput {
-  VideoQuality videoQuality = VideoQuality.best;
+  int? videoHeight;
   String? audioLanguage;
   bool autoBestAudio = true;
   int? audioBitrate;
@@ -15,7 +16,15 @@ class HomeInput {
   SubtitleTrack? get subtitleToDownload =>
       downloadSubtitleFile ? subtitle : null;
 
-  void selectVideoQuality(VideoQuality value) => videoQuality = value;
+  void selectVideoHeight(int? value) => videoHeight = value;
+
+  void resetVideoQuality(List<VideoFormat> formats, VideoQuality preference) {
+    videoHeight = preference == VideoQuality.best
+        ? null
+        : const FormatSelector()
+              .selectBestVideo(formats, quality: preference)
+              ?.height;
+  }
 
   void selectAudioLanguage(String? value) {
     audioLanguage = value;

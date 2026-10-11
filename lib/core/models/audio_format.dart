@@ -34,7 +34,7 @@ class AudioFormat {
   /// When non-null, this audio language is only available inside a muxed
   /// progressive m3u8 stream (video+audio).  The value is the yt-dlp format
   /// id of that progressive stream (e.g. `95-18`).  The download layer
-  /// should fetch this single format instead of separate video+audio.
+  /// extracts its audio and merges it with the selected video stream.
   final String? progressiveFormatId;
 
   /// Base language code (part before any region suffix).
