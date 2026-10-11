@@ -53,6 +53,9 @@ class ToolPaths {
   }
 
   Future<void> useIncluded() async {
+    if (bundled == null) {
+      throw StateError('Included tools are unavailable in the app bundle.');
+    }
     if (await activeFile.exists()) await activeFile.delete();
   }
 

@@ -49,6 +49,18 @@ void main() {
   );
 
   test(
+    'restore keeps the active update when included tools are missing',
+    () async {
+      final zip = makeUpdate(root, revision: 2);
+      await ToolBundleInstaller(paths: paths).install(zip, await hash(zip), 2);
+      final active = paths.activeFile.readAsStringSync();
+      paths.bundledDirectory.deleteSync(recursive: true);
+      await expectLater(paths.useIncluded(), throwsStateError);
+      expect(paths.activeFile.readAsStringSync(), active);
+    },
+  );
+
+  test(
     'a newer app bundle takes precedence over an older installed update',
     () async {
       final zip = makeUpdate(root, revision: 2);

@@ -15,6 +15,7 @@ class LinuxDownloadPlatform extends DesktopDownloadPlatform {
          toolPaths:
              toolPaths ??
              ToolPaths(
+               allowSystemFallback: false,
                updatesDirectory: Directory(
                  '${paths.appDataDirectory().path}/tools',
                ),

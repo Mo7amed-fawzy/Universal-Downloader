@@ -128,10 +128,30 @@ if(NOT CMAKE_BUILD_TYPE MATCHES "Debug")
 endif()
 
 set(MEDIA_TOOLS_DIR "${CMAKE_CURRENT_SOURCE_DIR}/../build/tool-runtime")
-if(EXISTS "${MEDIA_TOOLS_DIR}/manifest.json")
-  install(DIRECTORY "${MEDIA_TOOLS_DIR}/"
-    DESTINATION "${CMAKE_INSTALL_PREFIX}/tools"
-    USE_SOURCE_PERMISSIONS COMPONENT Runtime)
-elseif(NOT CMAKE_BUILD_TYPE MATCHES "Debug")
-  message(FATAL_ERROR "Included tools are missing. Run python3 tool/prepare_tools.py first.")
+set(MEDIA_TOOLS_READY TRUE)
+foreach(MEDIA_TOOL yt-dlp ffmpeg ffprobe deno)
+  if(NOT EXISTS "${MEDIA_TOOLS_DIR}/${MEDIA_TOOL}")
+    set(MEDIA_TOOLS_READY FALSE)
+  endif()
+endforeach()
+if(NOT EXISTS "${MEDIA_TOOLS_DIR}/manifest.json")
+  set(MEDIA_TOOLS_READY FALSE)
 endif()
+if(NOT MEDIA_TOOLS_READY)
+  find_package(Python3 3.11 REQUIRED COMPONENTS Interpreter)
+  execute_process(
+    COMMAND "${Python3_EXECUTABLE}" "${CMAKE_CURRENT_SOURCE_DIR}/../tool/prepare_tools.py" --platform linux-x64
+    WORKING_DIRECTORY "${CMAKE_CURRENT_SOURCE_DIR}/.."
+    RESULT_VARIABLE MEDIA_TOOLS_PREPARATION_RESULT)
+  if(NOT MEDIA_TOOLS_PREPARATION_RESULT STREQUAL "0")
+    message(FATAL_ERROR "Could not prepare the included tools for Linux.")
+  endif()
+endif()
+foreach(MEDIA_TOOL yt-dlp ffmpeg ffprobe deno manifest.json)
+  if(NOT EXISTS "${MEDIA_TOOLS_DIR}/${MEDIA_TOOL}")
+    message(FATAL_ERROR "Included tool bundle is incomplete: ${MEDIA_TOOL}")
+  endif()
+endforeach()
+install(DIRECTORY "${MEDIA_TOOLS_DIR}/"
+  DESTINATION "${CMAKE_INSTALL_PREFIX}/tools"
+  USE_SOURCE_PERMISSIONS COMPONENT Runtime)
