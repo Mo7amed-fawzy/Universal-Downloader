@@ -2,20 +2,36 @@
 
 Last updated: 2026-10-11 (Africa/Cairo).
 
-## Current Checkpoint: Changes Organized Into Focused Commits
+## Current Checkpoint: Stable Download Progress
 
-The pending content changes are grouped into Linux tool bundling, analyzer
-configuration, persistent link cache/download history, URL clearing, video
-quality/HLS merging, audio bitrate selection, and documentation commits on
-`main`. Existing file-mode-only changes are left local; committed modes are
-preserved. Commit review compares file hashes with the pre-commit snapshot and
-checks staged diffs. No application tests or builds were rerun for this
-commit-only task; the checks below remain the implementation evidence.
+DownloadTask keeps a separate monotonic displayed percentage for each phase,
+while retaining the latest raw size/percentage estimates. Status-only yt-dlp
+messages preserve numeric progress instead of switching the bar to an
+indeterminate animation. Phase changes and retries reset progress; repeated
+notifications for the same phase do not. Invalid/out-of-range percentages cannot
+reach the bar. DownloadActiveProgress holds download statistics to one line with
+tabular digits and a tooltip, keeping the card height fixed. Merging/verifying
+use their own processing labels without stale transfer statistics.
 
-Push was attempted but failed because Git could not obtain a GitHub username
-(noninteractive session); GitHub CLI is unavailable. `main` remains 11 commits
-ahead of `origin/main` (seven new commits plus four earlier local commits).
-Next: authenticate GitHub and run `git push origin main`.
+Verified: a widget reproduction failed before the fix when source estimates
+changed from 6% to 5.5%. All 38 focused local tests passed afterward, covering
+progress, status messages, phase/retry resets, card geometry, queue behavior,
+YouTube provider, and responsive layouts. `flutter analyze --no-pub` and scoped
+`git diff --check` passed. Hot reload succeeded in the running Linux app and
+reported no runtime errors. No new live YouTube download or release build was
+performed. Next: observe the next real download through video/audio phases.
+
+Commit review on 2026-10-11: `flutter analyze --no-pub` passed, and all 12
+local tests in download_progress, download_manager, downloads_page, and
+android_layout passed. Staged `git diff --check` passed. No live download or
+release build was run during this review.
+
+The progress fix and regression tests are committed as `52c0352` and pushed to
+`origin/main` through the existing `github-personal` SSH alias. The sandboxed
+push could not resolve github.com; the approved network retry succeeded.
+Origin's push URL uses SSH while fetch remains HTTPS. File-mode-only local
+changes remain untouched; committed source files retain non-executable modes.
+Use `git status -sb` for the current local/remote relationship.
 
 ## Previous Checkpoint: Audio Quality From Available Source Bitrates
 
