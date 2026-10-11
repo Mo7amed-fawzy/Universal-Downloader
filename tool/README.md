@@ -16,8 +16,10 @@ Python 3.11 or newer is a build dependency. `prepare_tools.py` downloads the
 versions pinned in `tool_versions.json`, checks the published SHA-256 hashes,
 and stages executables, licenses, and a per-file manifest in `build/tool-runtime`.
 Downloads are cached in `.tool-cache`. CMake includes this runtime in the app;
-release builds fail when it has not been prepared. For debug development,
-run `python3 tool/prepare_tools.py` before `flutter run -d linux` to use it too.
+Linux builds, including `flutter run -d linux`, prepare the runtime automatically
+when it is missing and stop if any included executable is unavailable. The app
+uses only its included or verified updated tools unless a custom executable path
+is set in Settings.
 
 The build creates:
 
@@ -160,7 +162,10 @@ Known folders are queried via `SHGetKnownFolderPath`; the app writes to
 updates use `runtime-windows-x64.*` and cannot activate a Linux runtime.
 No Windows build, signature, installer, or clean-machine run has been produced
 in this Linux session. The next session on the user's Windows machine should
-start with `PROJECT_STATE.md` and the commands above.
+start with `PROJECT_STATE.md` and the commands above. On 2026-10-07 a Windows
+machine produced `dist/universal-downloader-windows-x64.zip` with passing
+build-time smoke checks; clean-machine startup and live download validation
+remain outstanding.
 
 ## Redistribution
 

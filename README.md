@@ -12,7 +12,7 @@ formats, and downloads the best video stream plus your preferred audio track
 - Provider-agnostic architecture: YouTube today, more providers (Facebook,
   Instagram, TikTok, X/Twitter, Reddit, Vimeo) and direct media URLs planned.
 - Per-language audio selection (e.g. prefer Arabic, fall back to English).
-- Best video quality selection with a configurable cap (2160p → 360p).
+- Video quality choices follow the fetched formats, including 144p/240p when available.
 - MP4/MKV container decision based on the actual codecs (stream copy, no
   re-encoding).
 - Merged output verified with `ffprobe` (streams present, language matches,
@@ -20,6 +20,9 @@ formats, and downloads the best video stream plus your preferred audio track
 - Queue with concurrency limit, per-task progress, retry and cancellation.
 - Included media tools with verified updates and recovery in Advanced settings.
 - App settings persisted with `shared_preferences`.
+- Five-minute link metadata cache, clearable from Settings → Storage.
+- Completed downloads retained across restarts with Drift/SQLite. Removing a
+  history entry leaves the downloaded video file in place.
 
 ## Requirements
 
@@ -117,8 +120,9 @@ The Open video action delegates to an installed video player. No broad storage
 permission is required. Small screens use bottom navigation.
 
 Keep the app open while downloading in this preview. Foreground notifications,
-recovery after process death, sharing, and persistent queue history are not yet
-implemented. Release startup was verified on a Realme C53 with Android 14;
+recovery of active downloads after process death and sharing are not yet
+implemented. Completed history persists; the new storage layer has been tested
+on Linux and still needs Android device validation. Release startup was verified on a Realme C53 with Android 14;
 full runtime/merge/publication tests used an Android 13 x86_64 emulator.
 Full ARM64 download testing and 16 KB page-size validation remain release checks.
 
@@ -143,6 +147,9 @@ from the source project during development, use:
 flutter run -d linux
 ```
 
+The first Linux build prepares the included media tools automatically. Keep the
+whole generated application bundle together when running it outside Flutter.
+
 ### 1. Paste a Video Link
 
 On **Home**, paste a YouTube video link into the URL field. The clipboard button
@@ -162,8 +169,9 @@ video; check the selected language before downloading.
 
 ### 3. Choose Download Options
 
-Keep automatic audio selection enabled to use the best track in the selected
-language, or turn it off to choose an audio quality. Choose a **Container**
+Use **Audio Quality** to choose an available bitrate for the selected language,
+or keep **Best Available** for automatic selection. Changing the audio language
+resets its quality to **Best Available**. Choose a **Container**
 (Auto, MP4, or MKV), then use **Choose** under **Output Folder** to select where
 the file will be saved. Click **Download** to start.
 
@@ -257,6 +265,26 @@ skip otherwise. The network test hits a well-known public video.
 - App data, logs and temporary download artifacts:
   `~/.local/share/universal_downloader/`
 - Debug log: `~/.local/share/universal_downloader/logs/universal_downloader.log`
+- Link cache and completed-download database:
+  `~/.local/share/universal_downloader/library.sqlite`
+
+The cache keeps up to 100 successful results for five minutes. Repeated YouTube
+URL variants share an entry; changing extraction settings uses a new cache key.
+Clear link cache in Settings to force fresh metadata without removing download
+history or media files. The first fetch and expired entries still use yt-dlp.
+
+Completed history stores metadata and output paths (content URIs on Android),
+not video bytes. Existing files from before this feature are not imported.
+Only completed tasks persist; failed/cancelled/active queue state is not restored.
+Future playback positions and playlists can extend the SQLite schema.
+
+After changing database tables, regenerate the Dart code and export a new schema
+version. Preserve old snapshots and add a migration for existing installations:
+
+```sh
+dart run build_runner build
+dart run drift_dev schema dump lib/core/storage/app_database.dart drift_schemas/
+```
 
 ## Architecture
 
@@ -268,6 +296,7 @@ lib/
 │   ├── models/       MediaInfo, VideoFormat, AudioFormat, DownloadOptions
 │   ├── process/      CommandRunner contract, ProcessRunner, cancellation, progress parser
 │   ├── services/     DependencyChecker, LogService, MediaAssembler (merge + verify)
+│   ├── storage/      Drift schema, SQLite connection, persisted metadata
 │   ├── tools/        bundled paths, verified update installation, release checks
 │   └── utils/        filename sanitization, path helpers, format helpers
 ├── platform/         OS detection + DownloadPlatform contract

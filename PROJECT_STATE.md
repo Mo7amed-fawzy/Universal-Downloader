@@ -1,12 +1,196 @@
 # Universal Downloader: Project State
 
-Last updated: 2026-10-06 (Africa/Cairo).
+Last updated: 2026-10-11 (Africa/Cairo).
 
-## Current Checkpoint: Windows x64 Preparation
+## Current Checkpoint: Changes Organized Into Focused Commits
 
-Windows implementation and portable packaging are ready for native build/testing
-on the user's other Windows machine. This session ran on Linux. No Windows EXE,
-ZIP release, native C++ compilation, or Windows live download has been verified.
+The pending content changes are grouped into Linux tool bundling, analyzer
+configuration, persistent link cache/download history, URL clearing, video
+quality/HLS merging, audio bitrate selection, and documentation commits on
+`main`. Existing file-mode-only changes are left local; committed modes are
+preserved. Commit review compares file hashes with the pre-commit snapshot and
+checks staged diffs. No application tests or builds were rerun for this
+commit-only task; the checks below remain the implementation evidence.
+
+Push was attempted but failed because Git could not obtain a GitHub username
+(noninteractive session); GitHub CLI is unavailable. `main` remains 11 commits
+ahead of `origin/main` (seven new commits plus four earlier local commits).
+Next: authenticate GitHub and run `git push origin main`.
+
+## Previous Checkpoint: Audio Quality From Available Source Bitrates
+
+Audio Quality lists distinct positive bitrates from the selected language's
+formats. Unknown bitrates show an explicit source-metadata explanation. The
+YouTube mapper uses positive `abr`, falling back to `tbr` only for audio-only
+streams; muxed-stream total bitrate never becomes an audio quality choice.
+Manual selection now requires an exact bitrate and uses existing quality ranking
+for ties. An unavailable manual choice fails instead of silently selecting a
+nearby/best bitrate. Audio format refresh/retry preserves bitrate, codec, sample
+rate, and language; it fails if no matching replacement is available. Video and
+stream-copy merging behavior remain unchanged. The picker is extracted into
+`lib/ui/widgets/audio_quality_dropdown.dart`.
+
+Verified: 75 focused local tests passed across audio/video pickers, selectors,
+YouTube metadata/provider (including retry), and responsive layouts.
+`flutter analyze --no-pub` and scoped `git diff --check` passed. Hot reload
+succeeded in the running Linux app; no runtime errors were reported. No live
+YouTube download or release rebuild was performed. Next: fetch a video's
+metadata and check the available bitrates after selecting each audio language.
+
+## Previous Checkpoint: Persistent Link Cache and Download History
+
+Drift/SQLite now stores link metadata and completed-download records in
+`library.sqlite` under the platform app-data directory. Database work runs in a
+background isolate. Media files remain in their existing output locations;
+history stores file paths or Android content URIs, metadata, selected options,
+and completion timestamps. Downloads renders rows lazily and restores completed
+records at startup. Remove/Clear finished deletes records, never media files.
+
+Fetch Info reuses successful metadata for five minutes (maximum 100 entries),
+normalizes YouTube video URL variants, separates tool configurations, and
+deduplicates concurrent requests. Cached metadata preserves qualities, audio
+languages/HLS source IDs, and subtitles. Settings → Storage has a clear-cache
+icon; clearing does not touch history and blocks earlier in-flight requests
+from repopulating the cache. Corrupt cache entries are refetched. History write
+failures remain visible without marking successfully downloaded files failed.
+
+Verified: 181 local unit/widget tests passed, including file-backed database
+reopening, TTL, eviction, cache clearing races, controller wiring, history
+removal, content URIs, and storage failures. `flutter analyze --no-pub`, scoped
+`git diff --check`, and `flutter build linux --debug --no-pub` passed. Schema v1
+was exported to `drift_schemas/`. The running app's old queue was verified empty
+before hot restart; startup created the database and reported no runtime errors.
+No live YouTube download/cache timing or Windows/Android rebuild was performed.
+
+Remaining: only completed downloads are durable; queued/failed/cancelled tasks
+and in-progress resumption are not persisted. Older files are not automatically
+imported. A future player can add playback position/playlists via schema
+migrations; it has not been implemented. Next: fetch a link twice within five
+minutes, clear it in Settings, and verify a new completed download after restart.
+
+## Previous Checkpoint: Clear URL Action
+
+The URL field now shows a close (×) button before the existing clipboard button
+when text is present. It clears the controller and returns keyboard focus to
+the field. The link icon, clipboard action, and Fetch Info button remain.
+
+Verified: `flutter analyze --no-pub` passed; all four responsive layout tests
+passed at widths 320, 360, 412, and 1024. Hot reload succeeded in the running
+Linux app. No release rebuild was performed.
+
+## Previous Checkpoint: Video Qualities Follow Fetched Formats
+
+Home now lists unique actual video heights in descending order plus Auto,
+including 144p, 240p, nonstandard heights, and resolutions above 2160p when
+present. There is no fixed maximum. Saved quality preferences resolve to an
+available height on each fetch; settings also offer 144p and 240p. Video
+selection prioritizes the requested resolution before preferring DASH streams
+at that height.
+
+HLS-only audio languages previously bypassed the selected video and used the
+entire muxed stream. They now supply audio to the selected video through the
+existing stream-copy merge, with height verification enabled. This path fetches
+both the selected video and the muxed audio source, so it can transfer more data.
+
+Verified: 75 local tests passed across video/audio quality widgets, selector,
+responsive layout, subtitles, YouTube mapping/provider, and local media merging.
+Real FFmpeg/FFprobe tests preserved 144p and 240p video when Arabic audio came
+from a 720p muxed source. `flutter analyze --no-pub` and scoped `git diff --check`
+passed. Hot reload succeeded in the running Linux app; no runtime errors were
+reported. No live YouTube download or release rebuild was performed. Next:
+fetch video details again in the running app to use its actual quality list.
+
+## Previous Checkpoint: Audio Quality Always Visible
+
+Git history (`c3ed868`) and current source showed the bitrate selector still
+existed but was hidden while Auto was enabled. Audio Quality now stays visible
+for separate audio tracks. Selecting a bitrate disables Auto; Best Available
+or enabling Auto clears the manual bitrate. Changing language resets quality
+and displays only that language's bitrates. Unknown bitrates keep the automatic
+option visible. Embedded audio retains its existing explanation.
+
+Verified: 28 local tests passed across `audio_quality_picker_test.dart`,
+`android_layout_test.dart`, `unit/format_selector_test.dart`, and
+`subtitle_picker_test.dart`; analysis found no issues. Hot reload succeeded in
+the running Linux app and the runtime error check returned none. No live
+download was performed for this UI change. Next: use Audio Quality below the
+audio language after fetching video details.
+
+## Previous Checkpoint: Linux Debug Bundles Included Tools
+
+The Linux `flutter run -d linux` build previously allowed a missing
+`build/tool-runtime`, producing a debug bundle without `tools/`. It then used
+system yt-dlp/FFmpeg/FFprobe and reported Deno unavailable. Linux CMake now
+prepares the pinned runtime automatically when any required tool or manifest is
+missing, and fails if preparation cannot provide all four tools. The Linux
+platform no longer falls back to system executables. Restoring included tools
+now reports an error and preserves an active update if the included bundle is
+absent. The running debug app must be restarted to load these changes.
+
+Verified on 2026-10-11: `flutter build linux --debug --no-pub` prepared the
+runtime from a missing directory and bundled all four executables. The local
+`dart tool/smoke_runtime.dart build/linux/x64/debug/bundle` passed all tool
+version checks, MP4/MKV cover merges, FFprobe verification, and Deno JavaScript.
+The focused Flutter tests passed (25), `flutter analyze --no-pub` found no
+issues, and `git diff --check` passed for the edited build/docs files. No live
+download or running-app UI recheck was performed after the rebuild. Next: restart
+the debug app and use Diagnostics → Check tools to confirm the banner clears.
+
+## Previous Checkpoint: Windows x64 Build Produced
+
+The Windows build was produced and smoke-tested natively on the user's Windows
+machine (Windows 10 Pro 22H2, VS Build Tools 2022 17.14 + Win10 SDK 10.0.26100).
+A portable release ZIP exists in `dist/`. The app UI has not been launched, and
+no Windows live download, Explorer reveal, Arabic audio/subtitle check, clean
+machine run, or update install has been performed.
+
+Environment setup performed for this build:
+
+- Flutter upgraded in place `C:\flutter_local\flutter` from 3.41.6 to **3.47.6**
+  (Dart 3.13.5); the previous SDK failed pubspec's `^3.12.2` constraint.
+- Python 3.13.14 at `%LOCALAPPDATA%\Programs\Python\Python313` was added to the
+  front of the user PATH (the Microsoft Store alias had been shadowing it).
+- `flutter pub get` under the new SDK changed `pubspec.lock` (4 transitive
+  dependencies) and the tool auto-added build/platform excludes to
+  `analysis_options.yaml`. These are uncommitted.
+
+### Build Result (2026-10-07)
+
+- `python tool/build_windows.py` completed: prepared `build/tool-runtime-windows`
+  from `.tool-cache`, ran all four tool version checks, built the release app,
+  and passed the packaged smoke (included tools, MP4/MKV cover merges, FFprobe
+  verification, Deno JavaScript, and the Windows process-tree cancellation check
+  with a system-only PATH).
+- Output: `dist/universal-downloader-windows-x64.zip` (199954308 bytes),
+  `dist/runtime-windows-x64.zip` (173320599 bytes), plus JSON/SHA-256 sidecars.
+- `build/windows/x64/runner/Release/` contains the app with `tools/` and the
+  app-local Visual C++ runtime DLLs beside `universal_downloader.exe`.
+- To test now: extract the entire ZIP folder and run `universal_downloader.exe`
+  (do not copy the EXE alone), or run the Release folder directly.
+
+### Checks Actually Run on Windows
+
+- `flutter doctor -v`: no issues; Windows desktop enabled, VS detected.
+- `flutter analyze --no-pub`: no errors; one new info lint
+  (`use_super_parameters` at `lib/core/errors/downloader_exceptions.dart:63`)
+  from the newer analyzer.
+- `flutter test --no-pub test/unit/windows_platform_test.dart
+  test/unit/log_service_test.dart test/unit/filename_sanitizer_test.dart`:
+  30 passed.
+- `python tool/test_windows_packaging.py`: 4 passed.
+- `python tool/build_windows.py`: passed, including its internal smoke checks.
+
+### Remaining Windows Validation
+
+Launch the built app; verify a real YouTube download with Arabic audio and
+subtitles, MP4/MKV artwork, cancellation and child cleanup, Explorer Open
+location, a path containing spaces/Arabic, Diagnostics tool checks, and
+local tool update install/restore. Validate clean-machine startup (Windows
+Sandbox, no Python/media tools on PATH). None of the earlier Linux/Android
+commit history was pushed; `main` is still 4 commits ahead of `origin/main`.
+
+## Previous Checkpoint: Windows x64 Preparation (Linux session)
+
 Changes are organized into four local commits on main: no-console logging,
 Windows platform integration, portable packaging, and documentation. No push
 or publication was performed. Commit-only review preserved source contents;
@@ -205,8 +389,7 @@ remain system requirements. Linux x86_64 is the supported package target.
   the app tarball, tool update ZIP, metadata, and checksums into ignored `dist/`.
   CMake refuses a release build without a prepared runtime.
 - `ToolPaths` prefers a validated active update or included `tools/` beside the
-  app executable. Saved custom executable paths remain supported. Source-only
-  debug runs without a runtime may fall back to PATH.
+  app executable. Saved custom executable paths remain supported.
 - Versions and paths moved from the main Settings view into
   **Advanced → Diagnostics**, with Check tools, Update tools, and Use included
   tools. Restoring also clears custom executable overrides.
@@ -310,7 +493,8 @@ and a Windows implementation awaiting native validation. Dart package:
 | `lib/main.dart`, `lib/app/` | AppController startup, providers, settings, checks, queue composition. |
 | `lib/platform/` | OS detection and DownloadPlatform; shared desktop services, Linux/Android, Windows implementation awaiting native validation. |
 | `lib/providers/` | Provider contracts, factories, injected dependencies, registry, format selection; YouTube and direct HTTP(S). |
-| `lib/downloads/` | Queue, task state, retry/concurrency, temporary files. |
+| `lib/downloads/` | Queue, task state, retry/concurrency, completed history, temporary files. |
+| `lib/core/storage/` | Drift schema, background SQLite connection, metadata/options serialization. |
 | `lib/core/process/` | CommandRunner contract; local argument-array execution, output capture, SIGTERM/SIGKILL cancellation. |
 | `lib/core/services/` | Media assembly/verification, dependency checks, logging, file reveal. |
 | `lib/core/tools/` | Runtime manifests, executable resolution, staged updates, release checks. |
@@ -352,7 +536,8 @@ download success from metadata extraction or local media generation.
 Data root: `$XDG_DATA_HOME/universal_downloader`, default
 `~/.local/share/universal_downloader`. Logs are under `logs/`, task artifacts
 under `temp/download_task_<id>/`, updates under `tools/`. Preferences use
-shared_preferences key `settings_v1`. Queue history/theme are not persisted.
+shared_preferences key `settings_v1`. `library.sqlite` holds completed-download
+history and the five-minute link cache. Active queue state/theme are not persisted.
 Linux output defaults to Videos when present, otherwise Downloads, unless overridden.
 Android app data is under files/universal_downloader; completed public downloads
 are under Downloads/UniversalDownloader in a unique folder per task.
@@ -363,8 +548,8 @@ These pre-existing observations are outside the bundling request:
 
 1. Direct-provider metadata lacks dimensions required by Home's video selector;
    verification also expects both video and audio for audio-only inputs.
-2. HLS language mapping keeps the first progressive per language; the provider
-   ignores the selected DASH height and verifies no expected height on that path.
+2. HLS language mapping keeps the first progressive per language as its audio
+   source; downloading this muxed source may transfer unnecessary video data.
 3. Home selects the first language if the preferred one is absent, before the
    configured fallback is applied during download selection.
 4. Language verification tolerates missing/und/eng tags and does not generally
@@ -391,8 +576,9 @@ run during this review. Keep the current app as the implementation base.
 ## Next Session
 
 Read this file, inspect relevant source, and follow the user's current request.
-The user will continue Windows build/testing on their other Windows machine.
-Start with the Windows handoff above. Android follow-ups remain separate work.
+The Windows build exists; validation of the running app and a live download is
+the open Windows work (see Remaining Windows Validation). Android follow-ups
+remain separate work.
 Use main only and one-line Conventional Commits when commits are requested.
 Use the git-commit skill for commit work. Do not publish releases, fix unrelated
 observations, or treat follow-up suggestions as standing authorization.
