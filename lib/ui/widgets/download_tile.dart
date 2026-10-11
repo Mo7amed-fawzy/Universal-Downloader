@@ -2,11 +2,11 @@ import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 
 import '../../app/app_controller.dart';
-import '../../core/utils/format_utils.dart';
 import '../../downloads/download_task.dart';
 import '../../downloads/download_task_state.dart';
 import '../components/status_chip.dart';
 import 'download_location_button.dart';
+import 'download_active_progress.dart';
 import 'error_dialog.dart';
 
 /// A single entry in the download queue.
@@ -110,7 +110,7 @@ class _StateArea extends StatelessWidget {
       case DownloadTaskState.downloadingSubtitles:
       case DownloadTaskState.merging:
       case DownloadTaskState.verifying:
-        return _activeRow(context);
+        return DownloadActiveProgress(task: task);
       case DownloadTaskState.completed:
         return _completedRow(context);
       case DownloadTaskState.failed:
@@ -118,60 +118,6 @@ class _StateArea extends StatelessWidget {
       case DownloadTaskState.cancelled:
         return _infoRow(context, 'Cancelled');
     }
-  }
-
-  Widget _activeRow(BuildContext context) {
-    final theme = Theme.of(context);
-    final progress = task.progress;
-    final percent = progress.percent;
-
-    final stats = [
-      if (progress.downloadedBytes != null)
-        FormatUtils.bytes(progress.downloadedBytes),
-      if (progress.totalBytes != null)
-        'of ${FormatUtils.bytes(progress.totalBytes)}',
-      if (percent != null) '${percent.toStringAsFixed(0)}%',
-      if (progress.speedBytesPerSecond != null)
-        FormatUtils.bytesPerSecond(progress.speedBytesPerSecond),
-      if (progress.eta != null) 'ETA ${FormatUtils.duration(progress.eta)}',
-    ].join(' ');
-
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        Wrap(
-          spacing: 8,
-          children: [
-            Text(
-              task.state.label,
-              style: theme.textTheme.bodyMedium?.copyWith(
-                fontWeight: FontWeight.w600,
-              ),
-            ),
-            const SizedBox(width: 8),
-            if (task.state == DownloadTaskState.merging ||
-                task.state == DownloadTaskState.verifying)
-              Text(
-                'Merging video and audio...',
-                style: theme.textTheme.bodySmall,
-              ),
-          ],
-        ),
-        const SizedBox(height: 8),
-        ClipRRect(
-          borderRadius: BorderRadius.circular(4),
-          child: LinearProgressIndicator(
-            value: percent == null ? null : percent / 100,
-            minHeight: 8,
-          ),
-        ),
-        const SizedBox(height: 6),
-        Text(
-          stats.isEmpty ? 'Starting...' : stats,
-          style: theme.textTheme.bodySmall,
-        ),
-      ],
-    );
   }
 
   Widget _completedRow(BuildContext context) {

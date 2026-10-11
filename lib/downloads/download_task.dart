@@ -47,6 +47,7 @@ class DownloadTask extends ChangeNotifier {
 
   DownloadTaskState _state = DownloadTaskState.queued;
   DownloadProgress _progress = const DownloadProgress();
+  double? _displayPercent;
   DownloaderException? _error;
   String? _technicalDetails;
   String? _outputPath;
@@ -56,6 +57,7 @@ class DownloadTask extends ChangeNotifier {
 
   DownloadTaskState get state => _state;
   DownloadProgress get progress => _progress;
+  double? get displayPercent => _displayPercent;
   DownloaderException? get error => _error;
   String? get technicalDetails => _technicalDetails;
   String? get outputPath => _outputPath;
@@ -68,12 +70,30 @@ class DownloadTask extends ChangeNotifier {
       _technicalDetails != null && _technicalDetails!.trim().isNotEmpty;
 
   void setPhase(DownloadTaskState state) {
+    if (_state == state) return;
     _state = state;
+    _progress = const DownloadProgress();
+    _displayPercent = null;
     notifyListeners();
   }
 
   void setProgress(DownloadProgress progress) {
-    _progress = progress;
+    final percent = progress.percent;
+    if (percent != null && percent.isFinite) {
+      final bounded = percent.clamp(0.0, 100.0);
+      if (_displayPercent == null || bounded > _displayPercent!) {
+        _displayPercent = bounded;
+      }
+    }
+    final statusOnly =
+        progress.percent == null &&
+        progress.downloadedBytes == null &&
+        progress.totalBytes == null &&
+        progress.speedBytesPerSecond == null &&
+        progress.eta == null;
+    _progress = statusOnly
+        ? _progress.copyWith(statusLabel: progress.statusLabel)
+        : progress;
     notifyListeners();
   }
 
@@ -107,6 +127,7 @@ class DownloadTask extends ChangeNotifier {
   void resetForRetry() {
     _state = DownloadTaskState.queued;
     _progress = const DownloadProgress();
+    _displayPercent = null;
     _error = null;
     _technicalDetails = null;
     _completedAt = null;
