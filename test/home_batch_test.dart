@@ -22,9 +22,12 @@ import 'package:universal_downloader/downloads/download_task_state.dart';
 import 'package:universal_downloader/providers/downloader_provider.dart';
 import 'package:universal_downloader/providers/format_selector.dart';
 import 'package:universal_downloader/providers/provider_registry.dart';
+import 'package:universal_downloader/providers/youtube/youtube_provider.dart';
 import 'package:universal_downloader/settings/app_settings.dart';
 import 'package:universal_downloader/settings/settings_service.dart';
 import 'package:universal_downloader/ui/pages/home_page.dart';
+import 'package:universal_downloader/ui/pages/downloads_navigation.dart';
+import 'package:universal_downloader/ui/widgets/download_history_entry.dart';
 import 'package:universal_downloader/ui/pages/settings_page.dart';
 import 'package:universal_downloader/ui/widgets/format_pickers.dart';
 import 'package:universal_downloader/ui/widgets/home_video_card.dart';
@@ -33,6 +36,7 @@ import 'package:universal_downloader/ui/widgets/home_video_fetch_card.dart';
 import 'package:universal_downloader/ui/widgets/media_info_card.dart';
 import 'package:universal_downloader/ui/widgets/output_folder_row.dart';
 import 'package:universal_downloader/ui/widgets/url_input_card.dart';
+import 'package:universal_downloader/ui/widgets/downloaded_video_warning.dart';
 
 import 'support/controlled_download_provider.dart';
 import 'support/persistence_fixtures.dart';
@@ -47,7 +51,15 @@ void main() {
     root = Directory.systemTemp.createTempSync('home_batch_');
     firstProvider = BatchProvider('first');
     otherProvider = BatchProvider('other');
-    controller = BatchController(root, [firstProvider, otherProvider]);
+    controller = BatchController(root, [
+      firstProvider,
+      otherProvider,
+      YoutubeProvider(
+        ytDlpPath: 'yt-dlp',
+        ffmpegPath: 'ffmpeg',
+        ffprobePath: 'ffprobe',
+      ),
+    ]);
     SharedPreferences.setMockInitialValues({});
   });
 
@@ -62,6 +74,7 @@ void main() {
     double height = 900,
     double textScale = 1,
     Brightness brightness = Brightness.light,
+    bool realDownloads = false,
   }) async {
     tester.view.physicalSize = Size(width, height);
     tester.view.devicePixelRatio = 1;
@@ -83,10 +96,12 @@ void main() {
             child: child!,
           ),
           home: const HomePage(),
+          onGenerateRoute: generateRoute,
           routes: {
             AppRoutes.settings: (_) => const SettingsPage(),
-            AppRoutes.downloads: (_) =>
-                const Scaffold(body: Text('Queued videos')),
+            if (!realDownloads)
+              AppRoutes.downloads: (_) =>
+                  const Scaffold(body: Text('Queued videos')),
           },
         ),
       ),
@@ -125,6 +140,203 @@ void main() {
     await tester.pump();
     await tester.pump(const Duration(milliseconds: 400));
   }
+
+  test(
+    'download history matches YouTube variants, not other sites or unfinished tasks',
+    () {
+      final completed = completedDownload('/missing/video.mkv');
+      controller.manager.queue.add(completed);
+      controller.manager.queue.add(
+        completedDownload('/missing/copy.mkv', id: 'copy'),
+      );
+      for (final link in [
+        'https://youtu.be/NAEp-qL4VHc?si=share',
+        'https://www.youtu.be/NAEp-qL4VHc',
+        'https://www.youtube.com/watch?v=NAEp-qL4VHc&t=20&list=playlist',
+        'https://m.youtube.com/shorts/NAEp-qL4VHc',
+        'https://www.youtube-nocookie.com/embed/NAEp-qL4VHc',
+        'https://youtube.com/live/NAEp-qL4VHc',
+      ]) {
+        expect(controller.manager.completedVideoCount([Uri.parse(link)]), 1);
+      }
+      expect(
+        controller.manager.completedVideoCount([
+          Uri.parse('https://evil.example/watch?v=NAEp-qL4VHc'),
+          Uri.parse('https://youtube.com.evil.example/watch?v=NAEp-qL4VHc'),
+          Uri.parse('https://youtube.com/watch?v=XXXXXXXXXXX'),
+          Uri.parse('https://youtube.com/playlist?list=NAEp-qL4VHc'),
+          Uri.parse('file:///NAEp-qL4VHc'),
+        ]),
+        0,
+      );
+      controller.manager.queue.remove('copy');
+      for (final state in DownloadTaskState.values.where(
+        (state) => state != DownloadTaskState.completed,
+      )) {
+        completed.setPhase(state);
+        expect(
+          controller.manager.completedVideoCount([completed.media.pageUrl]),
+          0,
+        );
+      }
+    },
+  );
+
+  for (final brightness in Brightness.values) {
+    testWidgets(
+      'download warning follows the link and opens Downloads at 375px $brightness',
+      (tester) async {
+        controller.settings = const AppSettings();
+        controller.manager.queue.add(completedDownload('/missing/video.mkv'));
+        await mount(tester, width: 375, textScale: 1.3, brightness: brightness);
+        expect(find.byType(DownloadedVideoWarning), findsNothing);
+        await tester.enterText(
+          find.byType(TextField),
+          'https://www.youtube.com/watch?v=NAEp-qL4VHc&t=20',
+        );
+        await tester.pump();
+        expect(find.text('Already downloaded'), findsOneWidget);
+        expect(
+          tester.getBottomLeft(find.text('Provider: YouTube')).dy,
+          lessThan(tester.getTopLeft(find.byType(DownloadedVideoWarning)).dy),
+        );
+        expect(
+          tester
+              .widget<FilledButton>(
+                find.widgetWithText(FilledButton, 'Fetch Info'),
+              )
+              .onPressed,
+          isNotNull,
+        );
+        expect(tester.takeException(), isNull);
+        await tester.ensureVisible(find.byType(DownloadedVideoWarning));
+        await tester.tap(find.byType(DownloadedVideoWarning));
+        await tester.pumpAndSettle();
+        expect(find.text('Queued videos'), findsOneWidget);
+        expect(
+          (ModalRoute.of(
+                    tester.element(find.text('Queued videos')),
+                  )!.settings.arguments
+                  as DownloadsNavigation)
+              .taskId,
+          'finished',
+        );
+        Navigator.of(tester.element(find.text('Queued videos'))).pop();
+        await tester.pumpAndSettle();
+        await tester.ensureVisible(find.byType(TextField));
+        await tester.enterText(
+          find.byType(TextField),
+          'https://youtube.com/watch?v=XXXXXXXXXXX',
+        );
+        await tester.pump();
+        expect(find.byType(DownloadedVideoWarning), findsNothing);
+        await tester.enterText(
+          find.byType(TextField),
+          'https://youtu.be/NAEp-qL4VHc',
+        );
+        await tester.pump();
+        expect(find.byType(DownloadedVideoWarning), findsOneWidget);
+        await tester.tap(find.byTooltip('Clear URL'));
+        await tester.pump();
+        expect(find.byType(DownloadedVideoWarning), findsNothing);
+      },
+    );
+  }
+
+  testWidgets('multi-download warning counts unique completed videos', (
+    tester,
+  ) async {
+    controller.manager.queue.add(completedDownload('/missing/video.mkv'));
+    controller.manager.queue.add(
+      completedDownload('/missing/copy.mkv', id: 'copy'),
+    );
+    await mount(tester);
+    await tester.enterText(
+      find.byType(TextField),
+      'https://youtu.be/NAEp-qL4VHc\nhttps://youtube.com/watch?v=NAEp-qL4VHc\nhttps://first.example/new',
+    );
+    await tester.pump();
+    expect(
+      tester
+          .widget<DownloadedVideoWarning>(find.byType(DownloadedVideoWarning))
+          .videoCount,
+      1,
+    );
+    expect(find.text('Already downloaded'), findsOneWidget);
+    expect(
+      tester
+          .widget<FilledButton>(find.widgetWithText(FilledButton, 'Add videos'))
+          .onPressed,
+      isNotNull,
+    );
+  });
+
+  testWidgets('warning reveals the newest matching download deep in history', (
+    tester,
+  ) async {
+    controller.settings = const AppSettings();
+    for (var index = 0; index < 100; index++) {
+      final task = completedDownload(
+        '/missing/video-$index.mkv',
+        id: 'history-$index',
+      );
+      if (index == 80) task.markCompleted('/missing/latest.mkv');
+      controller.manager.queue.add(task);
+    }
+    await mount(tester, realDownloads: true);
+    await tester.enterText(
+      find.byType(TextField),
+      'https://youtube.com/watch?v=NAEp-qL4VHc',
+    );
+    await tester.pump();
+    await tester.tap(find.byType(DownloadedVideoWarning));
+    await tester.pumpAndSettle();
+    final match = find.byWidgetPredicate(
+      (widget) =>
+          widget is DownloadHistoryEntry && widget.task.id == 'history-80',
+    );
+    expect(match, findsOneWidget);
+    expect(tester.widget<DownloadHistoryEntry>(match).highlighted, isTrue);
+    expect(find.text('Downloaded before'), findsOneWidget);
+    final bounds = tester.getRect(match);
+    expect(bounds.top, greaterThan(0));
+    expect(bounds.bottom, lessThanOrEqualTo(tester.view.physicalSize.height));
+    expect(tester.takeException(), isNull);
+  });
+
+  testWidgets('warning updates when a download finishes or is removed', (
+    tester,
+  ) async {
+    controller.settings = const AppSettings();
+    final media = firstProvider.media(Uri.parse('https://first.example/one'));
+    controller.manager.add(
+      provider: firstProvider,
+      media: media,
+      options: DownloadOptions(
+        taskId: 'finishing',
+        outputDirectory: root.path,
+        title: media.title,
+        videoFormatId: 'v2160',
+      ),
+      videoLabel: '2160p',
+      audioLabel: 'Arabic',
+    );
+    await mount(tester);
+    await tester.enterText(find.byType(TextField), media.pageUrl.toString());
+    await tester.pump();
+    expect(find.byType(DownloadedVideoWarning), findsNothing);
+    firstProvider.calls.single.complete(
+      DownloadTaskResult(
+        outputFile: File('${root.path}/one.mkv'),
+        merged: false,
+      ),
+    );
+    await tester.pump();
+    expect(find.byType(DownloadedVideoWarning), findsOneWidget);
+    await controller.manager.remove('finishing');
+    await tester.pump();
+    expect(find.byType(DownloadedVideoWarning), findsNothing);
+  });
 
   test('single mode is the default for new and existing settings', () async {
     expect(const AppSettings().multiDownloadMode, isFalse);

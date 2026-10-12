@@ -23,6 +23,7 @@ import '../widgets/url_input_card.dart';
 import '../widgets/app_scaffold.dart';
 import 'home_video_draft.dart';
 import 'home_video_entry.dart';
+import 'downloads_navigation.dart';
 
 /// Main screen: URLs → prepare videos → choose individual formats → download.
 class HomePage extends StatefulWidget {
@@ -85,6 +86,25 @@ class _HomePageState extends State<HomePage> {
 
   bool _isValidUrl(Uri url) =>
       (url.scheme == 'http' || url.scheme == 'https') && url.host.isNotEmpty;
+
+  void _viewPreviousDownload() {
+    final matches = context
+        .read<AppController>()
+        .manager
+        .completedVideosForUrls(
+          _urlController.text
+              .trim()
+              .split(RegExp(r'\s+'))
+              .map(Uri.tryParse)
+              .whereType<Uri>(),
+        );
+    Navigator.of(context).pushNamed(
+      AppRoutes.downloads,
+      arguments: matches.isEmpty
+          ? null
+          : DownloadsNavigation(taskId: matches.first.id),
+    );
+  }
 
   Future<void> _fetchInfo() async {
     final controller = context.read<AppController>();
@@ -534,15 +554,27 @@ class _HomePageState extends State<HomePage> {
                           ),
                         ],
                         const SizedBox(height: 12),
-                        UrlInputCard(
-                          controller: _urlController,
-                          focusNode: _urlFocusNode,
-                          fetching: !multiDownloadMode && _singleFetching,
-                          multiDownloadMode: multiDownloadMode,
-                          enabled: !busy,
-                          onFetch: _fetchInfo,
-                          provider: _provider,
-                          errorMessage: _errorMessage,
+                        ListenableBuilder(
+                          listenable: controller.manager,
+                          builder: (context, child) => UrlInputCard(
+                            controller: _urlController,
+                            focusNode: _urlFocusNode,
+                            fetching: !multiDownloadMode && _singleFetching,
+                            multiDownloadMode: multiDownloadMode,
+                            enabled: !busy,
+                            onFetch: _fetchInfo,
+                            provider: _provider,
+                            errorMessage: _errorMessage,
+                            previousDownloadCount: controller.manager
+                                .completedVideoCount(
+                                  _urlController.text
+                                      .trim()
+                                      .split(RegExp(r'\s+'))
+                                      .map(Uri.tryParse)
+                                      .whereType<Uri>(),
+                                ),
+                            onViewDownloads: _viewPreviousDownload,
+                          ),
                         ),
                         if (multiDownloadMode &&
                             controller.settings.autoStartDownload)

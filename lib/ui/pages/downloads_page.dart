@@ -4,12 +4,14 @@ import 'package:provider/provider.dart';
 import '../../app/app_controller.dart';
 import '../widgets/app_scaffold.dart';
 import '../widgets/download_history_confirmation_dialog.dart';
-import '../widgets/download_tile.dart';
+import '../widgets/download_history_list.dart';
 import '../widgets/downloads_header.dart';
 
 /// Full download queue with per-task state, progress and actions.
 class DownloadsPage extends StatelessWidget {
-  const DownloadsPage({super.key});
+  const DownloadsPage({super.key, this.initialTaskId});
+
+  final String? initialTaskId;
 
   @override
   Widget build(BuildContext context) {
@@ -23,24 +25,24 @@ class DownloadsPage extends StatelessWidget {
           selectedIndex: 1,
           body: tasks.isEmpty
               ? const _EmptyState()
-              : ListView.builder(
-                  padding: const EdgeInsets.all(24),
-                  itemCount: tasks.length + 1,
-                  itemBuilder: (context, index) {
-                    if (index == 0) {
-                      return DownloadsHeader(
+              : Column(
+                  children: [
+                    Padding(
+                      padding: const EdgeInsets.fromLTRB(24, 24, 24, 0),
+                      child: DownloadsHeader(
                         activeCount: controller.manager.activeCount,
                         canClear: tasks.any((task) => task.state.isTerminal),
                         onClear: () => _clearTerminal(context, controller),
                         historyError: controller.manager.historyError,
-                      );
-                    }
-                    return Padding(
-                      key: ValueKey(tasks[index - 1].id),
-                      padding: const EdgeInsets.only(bottom: 8),
-                      child: DownloadTile(task: tasks[index - 1]),
-                    );
-                  },
+                      ),
+                    ),
+                    Expanded(
+                      child: DownloadHistoryList(
+                        tasks: tasks,
+                        initialTaskId: initialTaskId,
+                      ),
+                    ),
+                  ],
                 ),
         );
       },

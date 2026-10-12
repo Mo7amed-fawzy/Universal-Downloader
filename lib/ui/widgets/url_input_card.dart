@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 
 import '../../providers/downloader_provider.dart';
+import 'downloaded_video_warning.dart';
 
 /// URL input row with fetch action and live provider detection status.
 class UrlInputCard extends StatelessWidget {
@@ -16,6 +17,8 @@ class UrlInputCard extends StatelessWidget {
     this.enabled = true,
     this.multiDownloadMode = false,
     this.statusMessage,
+    this.previousDownloadCount = 0,
+    this.onViewDownloads,
   });
 
   final TextEditingController controller;
@@ -27,6 +30,8 @@ class UrlInputCard extends StatelessWidget {
   final bool enabled;
   final bool multiDownloadMode;
   final String? statusMessage;
+  final int previousDownloadCount;
+  final VoidCallback? onViewDownloads;
 
   @override
   Widget build(BuildContext context) {
@@ -160,6 +165,13 @@ class UrlInputCard extends StatelessWidget {
                   ),
                 ],
               ),
+            if (previousDownloadCount > 0) ...[
+              const SizedBox(height: 4),
+              DownloadedVideoWarning(
+                videoCount: previousDownloadCount,
+                onViewDownloads: onViewDownloads,
+              ),
+            ],
           ],
         ),
       ),

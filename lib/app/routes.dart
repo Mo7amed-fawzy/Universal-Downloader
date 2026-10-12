@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 
 import '../ui/pages/downloads_page.dart';
+import '../ui/pages/downloads_navigation.dart';
 import '../ui/pages/home_page.dart';
 import '../ui/pages/settings_page.dart';
 
@@ -19,9 +20,12 @@ Route<dynamic>? generateRoute(RouteSettings settings) {
         builder: (_) => const HomePage(),
       );
     case AppRoutes.downloads:
+      final target = settings.arguments;
       return MaterialPageRoute<void>(
         settings: settings,
-        builder: (_) => const DownloadsPage(),
+        builder: (_) => DownloadsPage(
+          initialTaskId: target is DownloadsNavigation ? target.taskId : null,
+        ),
       );
     case AppRoutes.settings:
       return MaterialPageRoute<void>(

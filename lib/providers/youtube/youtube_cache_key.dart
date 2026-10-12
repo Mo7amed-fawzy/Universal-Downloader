@@ -1,6 +1,6 @@
 String youtubeCacheKey(Uri url) {
   final segments = url.pathSegments;
-  final id = url.host.toLowerCase() == 'youtu.be'
+  final id = {'youtu.be', 'www.youtu.be'}.contains(url.host.toLowerCase())
       ? segments.firstOrNull
       : url.path == '/watch'
       ? url.queryParameters['v']

@@ -13,6 +13,7 @@ import 'package:universal_downloader/downloads/download_task_state.dart';
 import 'package:universal_downloader/providers/downloader_provider.dart';
 import 'package:universal_downloader/providers/media_info_cache.dart';
 import 'package:universal_downloader/providers/provider_registry.dart';
+import 'package:universal_downloader/providers/youtube/youtube_provider.dart';
 
 import '../support/controlled_download_provider.dart';
 import '../support/persistence_fixtures.dart';
@@ -101,7 +102,13 @@ void main() {
     final output = File('${root.path}/video.mp4')..writeAsStringSync('keep');
     await history.save(completedDownload(output.path));
     final manager = DownloadManager(
-      registry: ProviderRegistry([]),
+      registry: ProviderRegistry([
+        YoutubeProvider(
+          ytDlpPath: 'yt-dlp',
+          ffmpegPath: 'ffmpeg',
+          ffprobePath: 'ffprobe',
+        ),
+      ]),
       repository: DownloadRepository(paths: QueueTestPaths(root)),
       log: log,
       history: history,
@@ -110,7 +117,10 @@ void main() {
     await manager.restoreHistory();
     expect(manager.tasks.single.state, DownloadTaskState.completed);
     expect(manager.activeCount, 0);
+    final link = Uri.parse('https://www.youtube.com/watch?v=NAEp-qL4VHc&t=20');
+    expect(manager.completedVideoCount([link]), 1);
     await manager.remove('finished');
+    expect(manager.completedVideoCount([link]), 0);
     expect(manager.tasks, isEmpty);
     expect(await history.load(), isEmpty);
     expect(output.readAsStringSync(), 'keep');

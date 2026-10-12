@@ -9,6 +9,7 @@ import '../core/process/cancel_token.dart';
 import '../core/services/log_service.dart';
 import '../providers/downloader_provider.dart';
 import '../providers/provider_registry.dart';
+import '../providers/youtube/youtube_cache_key.dart';
 import 'download_queue.dart';
 import 'download_history.dart';
 import 'download_repository.dart';
@@ -43,6 +44,43 @@ class DownloadManager extends ChangeNotifier {
   List<DownloadTask> get tasks => queue.tasks;
 
   int get activeCount => _runningIds.length;
+
+  int completedVideoCount(Iterable<Uri> urls) =>
+      completedVideosForUrls(urls).length;
+
+  List<DownloadTask> completedVideosForUrls(Iterable<Uri> urls) {
+    final completed = <(String, String), DownloadTask>{};
+    for (final task in tasks) {
+      if (task.state != DownloadTaskState.completed) continue;
+      final key = _sourceKey(task.providerId, task.media.pageUrl);
+      final previous = completed[key];
+      if (previous == null ||
+          (task.completedAt != null &&
+              (previous.completedAt == null ||
+                  task.completedAt!.isAfter(previous.completedAt!)))) {
+        completed[key] = task;
+      }
+    }
+    final matches = <(String, String), DownloadTask>{};
+    for (final url in urls) {
+      if ((url.scheme != 'http' && url.scheme != 'https') || url.host.isEmpty) {
+        continue;
+      }
+      final provider = registry.resolve(url);
+      if (provider == null) continue;
+      final key = _sourceKey(provider.id, url);
+      final task = completed[key];
+      if (task != null) matches[key] = task;
+    }
+    return matches.values.toList();
+  }
+
+  (String, String) _sourceKey(String providerId, Uri url) => (
+    providerId,
+    providerId == 'youtube'
+        ? youtubeCacheKey(url)
+        : url.removeFragment().toString(),
+  );
 
   Future<void> restoreHistory() async {
     final restored = await history?.load() ?? const <DownloadTask>[];
