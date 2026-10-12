@@ -8,6 +8,7 @@ class AppSettings {
     this.rememberLastDirectory = true,
     this.lastDownloadDirectory = '',
     this.autoStartDownload = false,
+    this.multiDownloadMode = false,
     this.defaultVideoQuality = VideoQuality.best,
     this.containerPreference = ContainerPreference.auto,
     this.preferredLanguage = 'ar',
@@ -24,6 +25,7 @@ class AppSettings {
   final bool rememberLastDirectory;
   final String lastDownloadDirectory;
   final bool autoStartDownload;
+  final bool multiDownloadMode;
   final VideoQuality defaultVideoQuality;
   final ContainerPreference containerPreference;
 
@@ -49,6 +51,7 @@ class AppSettings {
     bool? rememberLastDirectory,
     String? lastDownloadDirectory,
     bool? autoStartDownload,
+    bool? multiDownloadMode,
     VideoQuality? defaultVideoQuality,
     ContainerPreference? containerPreference,
     String? preferredLanguage,
@@ -63,10 +66,12 @@ class AppSettings {
     return AppSettings(
       defaultDownloadDirectory:
           defaultDownloadDirectory ?? this.defaultDownloadDirectory,
-      rememberLastDirectory: rememberLastDirectory ?? this.rememberLastDirectory,
+      rememberLastDirectory:
+          rememberLastDirectory ?? this.rememberLastDirectory,
       lastDownloadDirectory:
           lastDownloadDirectory ?? this.lastDownloadDirectory,
       autoStartDownload: autoStartDownload ?? this.autoStartDownload,
+      multiDownloadMode: multiDownloadMode ?? this.multiDownloadMode,
       defaultVideoQuality: defaultVideoQuality ?? this.defaultVideoQuality,
       containerPreference: containerPreference ?? this.containerPreference,
       preferredLanguage: preferredLanguage ?? this.preferredLanguage,
@@ -81,30 +86,31 @@ class AppSettings {
   }
 
   Map<String, dynamic> toJson() => {
-        'defaultDownloadDirectory': defaultDownloadDirectory,
-        'rememberLastDirectory': rememberLastDirectory,
-        'lastDownloadDirectory': lastDownloadDirectory,
-        'autoStartDownload': autoStartDownload,
-        'defaultVideoQuality': defaultVideoQuality.name,
-        'containerPreference': containerPreference.name,
-        'preferredLanguage': preferredLanguage,
-        'autoSelectBestAudio': autoSelectBestAudio,
-        'fallbackLanguage': fallbackLanguage,
-        'ytDlpPath': ytDlpPath,
-        'ffmpegPath': ffmpegPath,
-        'ffprobePath': ffprobePath,
-        'extraYtDlpArgs': extraYtDlpArgs,
-        'debugLogging': debugLogging,
-      };
+    'defaultDownloadDirectory': defaultDownloadDirectory,
+    'rememberLastDirectory': rememberLastDirectory,
+    'lastDownloadDirectory': lastDownloadDirectory,
+    'autoStartDownload': autoStartDownload,
+    'multiDownloadMode': multiDownloadMode,
+    'defaultVideoQuality': defaultVideoQuality.name,
+    'containerPreference': containerPreference.name,
+    'preferredLanguage': preferredLanguage,
+    'autoSelectBestAudio': autoSelectBestAudio,
+    'fallbackLanguage': fallbackLanguage,
+    'ytDlpPath': ytDlpPath,
+    'ffmpegPath': ffmpegPath,
+    'ffprobePath': ffprobePath,
+    'extraYtDlpArgs': extraYtDlpArgs,
+    'debugLogging': debugLogging,
+  };
 
   factory AppSettings.fromJson(Map<String, dynamic> json) {
     return AppSettings(
       defaultDownloadDirectory:
           json['defaultDownloadDirectory'] as String? ?? '',
-      rememberLastDirectory:
-          json['rememberLastDirectory'] as bool? ?? true,
+      rememberLastDirectory: json['rememberLastDirectory'] as bool? ?? true,
       lastDownloadDirectory: json['lastDownloadDirectory'] as String? ?? '',
       autoStartDownload: json['autoStartDownload'] as bool? ?? false,
+      multiDownloadMode: json['multiDownloadMode'] as bool? ?? false,
       defaultVideoQuality: VideoQuality.values.firstWhere(
         (v) => v.name == json['defaultVideoQuality'],
         orElse: () => VideoQuality.best,

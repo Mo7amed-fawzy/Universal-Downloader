@@ -13,6 +13,9 @@ class UrlInputCard extends StatelessWidget {
     required this.onFetch,
     required this.provider,
     required this.errorMessage,
+    this.enabled = true,
+    this.multiDownloadMode = false,
+    this.statusMessage,
   });
 
   final TextEditingController controller;
@@ -21,6 +24,9 @@ class UrlInputCard extends StatelessWidget {
   final VoidCallback onFetch;
   final DownloaderProvider? provider;
   final String? errorMessage;
+  final bool enabled;
+  final bool multiDownloadMode;
+  final String? statusMessage;
 
   @override
   Widget build(BuildContext context) {
@@ -31,16 +37,32 @@ class UrlInputCard extends StatelessWidget {
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            Text('Paste a URL to download', style: theme.textTheme.titleMedium),
+            Text(
+              multiDownloadMode ? 'Add videos' : 'Paste a URL to download',
+              style: theme.textTheme.titleMedium,
+            ),
             const SizedBox(height: 12),
             LayoutBuilder(
               builder: (context, constraints) {
                 final field = TextField(
                   controller: controller,
                   focusNode: focusNode,
-                  onSubmitted: (_) => onFetch(),
+                  enabled: enabled && !fetching,
+                  minLines: 1,
+                  maxLines: multiDownloadMode ? 3 : 1,
+                  keyboardType: multiDownloadMode
+                      ? TextInputType.multiline
+                      : TextInputType.url,
+                  onSubmitted: multiDownloadMode
+                      ? null
+                      : (_) {
+                          if (enabled && !fetching) onFetch();
+                        },
                   decoration: InputDecoration(
-                    hintText: 'https://www.youtube.com/watch?v=...',
+                    labelText: multiDownloadMode ? 'Video links' : null,
+                    hintText: multiDownloadMode
+                        ? 'Paste one link per line'
+                        : 'https://www.youtube.com/watch?v=...',
                     prefixIcon: const Icon(Icons.link),
                     suffixIcon: ValueListenableBuilder<TextEditingValue>(
                       valueListenable: controller,
@@ -68,15 +90,21 @@ class UrlInputCard extends StatelessWidget {
                   ),
                 );
                 final button = FilledButton.icon(
-                  onPressed: fetching ? null : onFetch,
+                  onPressed: fetching || !enabled ? null : onFetch,
                   icon: fetching
                       ? const SizedBox(
                           width: 16,
                           height: 16,
                           child: CircularProgressIndicator(strokeWidth: 2),
                         )
-                      : const Icon(Icons.search),
-                  label: Text(fetching ? 'Fetching...' : 'Fetch Info'),
+                      : Icon(multiDownloadMode ? Icons.add : Icons.search),
+                  label: Text(
+                    fetching
+                        ? 'Fetching...'
+                        : multiDownloadMode
+                        ? 'Add videos'
+                        : 'Fetch Info',
+                  ),
                 );
                 return constraints.maxWidth < 500
                     ? Column(
@@ -93,14 +121,23 @@ class UrlInputCard extends StatelessWidget {
               },
             ),
             const SizedBox(height: 12),
+            if (statusMessage != null) ...[
+              Semantics(
+                liveRegion: true,
+                child: Text(statusMessage!, style: theme.textTheme.bodySmall),
+              ),
+              const SizedBox(height: 8),
+            ],
             if (provider != null && errorMessage == null)
               Row(
                 children: [
                   Icon(Icons.check_circle, size: 18, color: Colors.green),
                   const SizedBox(width: 8),
-                  Text(
-                    'Provider: ${provider!.displayName}',
-                    style: theme.textTheme.bodyMedium,
+                  Expanded(
+                    child: Text(
+                      'Provider: ${provider!.displayName}',
+                      style: theme.textTheme.bodyMedium,
+                    ),
                   ),
                 ],
               )

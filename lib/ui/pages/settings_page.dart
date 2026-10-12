@@ -154,6 +154,16 @@ class _SettingsPageState extends State<SettingsPage> {
               ],
               SwitchListTile(
                 contentPadding: EdgeInsets.zero,
+                title: const Text('Multi-download mode'),
+                subtitle: const Text(
+                  'Prepare multiple videos and download them together. '
+                  'Turn off to download one video at a time.',
+                ),
+                value: _draft.multiDownloadMode,
+                onChanged: (v) => _save(_draft.copyWith(multiDownloadMode: v)),
+              ),
+              SwitchListTile(
+                contentPadding: EdgeInsets.zero,
                 title: const Text('Automatic downloads'),
                 subtitle: const Text(
                   'Start downloading immediately after fetching media info.',
