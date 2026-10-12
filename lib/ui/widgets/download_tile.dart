@@ -7,6 +7,7 @@ import '../../downloads/download_task_state.dart';
 import '../components/status_chip.dart';
 import 'download_location_button.dart';
 import 'download_active_progress.dart';
+import 'download_remove_button.dart';
 import 'error_dialog.dart';
 
 /// A single entry in the download queue.
@@ -214,10 +215,8 @@ class _Actions extends StatelessWidget {
           ),
         );
         buttons.add(
-          IconButton(
-            tooltip: 'Remove',
-            icon: const Icon(Icons.delete_outline),
-            onPressed: () =>
+          DownloadRemoveButton(
+            onRemove: () =>
                 context.read<AppController>().manager.remove(task.id),
           ),
         );
@@ -242,19 +241,15 @@ class _Actions extends StatelessWidget {
           ),
         );
         buttons.add(
-          IconButton(
-            tooltip: 'Remove',
-            icon: const Icon(Icons.delete_outline),
-            onPressed: () =>
+          DownloadRemoveButton(
+            onRemove: () =>
                 context.read<AppController>().manager.remove(task.id),
           ),
         );
       case DownloadTaskState.cancelled:
         buttons.add(
-          IconButton(
-            tooltip: 'Remove',
-            icon: const Icon(Icons.delete_outline),
-            onPressed: () =>
+          DownloadRemoveButton(
+            onRemove: () =>
                 context.read<AppController>().manager.remove(task.id),
           ),
         );

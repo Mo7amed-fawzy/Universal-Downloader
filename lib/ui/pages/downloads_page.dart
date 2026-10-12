@@ -3,6 +3,7 @@ import 'package:provider/provider.dart';
 
 import '../../app/app_controller.dart';
 import '../widgets/app_scaffold.dart';
+import '../widgets/download_history_confirmation_dialog.dart';
 import '../widgets/download_tile.dart';
 import '../widgets/downloads_header.dart';
 
@@ -30,7 +31,7 @@ class DownloadsPage extends StatelessWidget {
                       return DownloadsHeader(
                         activeCount: controller.manager.activeCount,
                         canClear: tasks.any((task) => task.state.isTerminal),
-                        onClear: () => _clearTerminal(controller),
+                        onClear: () => _clearTerminal(context, controller),
                         historyError: controller.manager.historyError,
                       );
                     }
@@ -46,11 +47,19 @@ class DownloadsPage extends StatelessWidget {
     );
   }
 
-  Future<void> _clearTerminal(AppController controller) async {
+  Future<void> _clearTerminal(
+    BuildContext context,
+    AppController controller,
+  ) async {
     final terminal = controller.manager.tasks
         .where((t) => t.state.isTerminal)
         .map((t) => t.id)
         .toList();
+    final confirmed = await DownloadHistoryConfirmationDialog.confirm(
+      context,
+      clearAll: true,
+    );
+    if (!context.mounted || !confirmed) return;
     for (final id in terminal) {
       await controller.manager.remove(id);
     }
