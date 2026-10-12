@@ -9,6 +9,52 @@ import 'package:universal_downloader/downloads/download_task_state.dart';
 import 'package:universal_downloader/ui/widgets/download_tile.dart';
 
 void main() {
+  testWidgets(
+    'fragment counts prevent early full progress and changing estimates',
+    (tester) async {
+      final task = createTask();
+      addTearDown(task.dispose);
+      task.setPhase(DownloadTaskState.downloadingVideo);
+      await tester.pumpWidget(
+        MaterialApp(
+          home: Scaffold(body: DownloadTile(task: task)),
+        ),
+      );
+      const parser = YtDlpProgressParser();
+      task.setProgress(
+        parser.parse('[download] 100.0% of ~ 1.00KiB (frag 0/100)')!,
+      );
+      expect(task.displayPercent, 0);
+      task.setProgress(
+        parser.parse(
+          '[download] 5.0% of ~ 124.00MiB at 739KiB/s ETA 00:52 (frag 5/100)',
+        )!,
+      );
+      await tester.pump();
+      expect(task.progress.downloadedBytes, closeTo(6.2 * 1024 * 1024, 1));
+      expect(
+        tester
+            .widget<LinearProgressIndicator>(
+              find.byType(LinearProgressIndicator),
+            )
+            .value,
+        closeTo(0.05, 0.0001),
+      );
+      expect(find.textContaining('5%'), findsOneWidget);
+      expect(find.textContaining('100%'), findsNothing);
+      task.setProgress(
+        parser.parse('[download] Retrying fragment 2 (1/10)...')!,
+      );
+      await tester.pump();
+      expect(task.displayPercent, 5);
+      task.setProgress(
+        parser.parse('[download] 100.0% of 124.00MiB in 00:58')!,
+      );
+      await tester.pump();
+      expect(task.displayPercent, 100);
+    },
+  );
+
   test(
     'preserves raw estimates and keeps display progress scoped to each phase',
     () {
@@ -69,28 +115,48 @@ void main() {
     },
   );
 
-  testWidgets('progress does not move backward or animate on status messages', (
-    tester,
-  ) async {
-    final task = createTask();
-    addTearDown(task.dispose);
-    task.setPhase(DownloadTaskState.downloadingVideo);
-    await tester.pumpWidget(
-      MaterialApp(
-        home: Scaffold(
-          body: SingleChildScrollView(child: DownloadTile(task: task)),
+  testWidgets(
+    'progress never reverses on changing estimates or status messages',
+    (tester) async {
+      final task = createTask();
+      addTearDown(task.dispose);
+      task.setPhase(DownloadTaskState.downloadingVideo);
+      await tester.pumpWidget(
+        MaterialApp(
+          home: Scaffold(
+            body: SingleChildScrollView(child: DownloadTile(task: task)),
+          ),
         ),
-      ),
-    );
-    const parser = YtDlpProgressParser();
-    final updates = [
-      ('[download] 6.0% of ~ 57.81MiB at 550KiB/s ETA 01:23', 0.06),
-      ('[download] 5.5% of ~ 65.00MiB at 540KiB/s ETA 01:24', 0.06),
-      ('[download] Retrying fragment 2 (1/10)...', 0.06),
-      ('[download] 7.0% of ~ 64.00MiB at 570KiB/s ETA 01:20', 0.07),
-    ];
-    for (final (line, expected) in updates) {
-      task.setProgress(parser.parse(line)!);
+      );
+      const parser = YtDlpProgressParser();
+      final updates = [
+        (
+          '[download] 6.0% of ~ 57.81MiB at 550KiB/s ETA 01:23 (frag 6/100)',
+          0.06,
+        ),
+        (
+          '[download] 5.5% of ~ 65.00MiB at 540KiB/s ETA 01:24 (frag 6/100)',
+          0.06,
+        ),
+        ('[download] Retrying fragment 2 (1/10)...', 0.06),
+        (
+          '[download] 7.0% of ~ 64.00MiB at 570KiB/s ETA 01:20 (frag 7/100)',
+          0.07,
+        ),
+      ];
+      for (final (line, expected) in updates) {
+        task.setProgress(parser.parse(line)!);
+        await tester.pump();
+        expect(
+          tester
+              .widget<LinearProgressIndicator>(
+                find.byType(LinearProgressIndicator),
+              )
+              .value,
+          closeTo(expected, 0.0001),
+        );
+      }
+      task.setPhase(DownloadTaskState.downloadingAudio);
       await tester.pump();
       expect(
         tester
@@ -98,28 +164,22 @@ void main() {
               find.byType(LinearProgressIndicator),
             )
             .value,
-        closeTo(expected, 0.0001),
+        0,
       );
-    }
-    task.setPhase(DownloadTaskState.downloadingAudio);
-    await tester.pump();
-    expect(
-      tester
-          .widget<LinearProgressIndicator>(find.byType(LinearProgressIndicator))
-          .value,
-      0,
-    );
-    expect(find.textContaining('57.81'), findsNothing);
-    task.setProgress(const DownloadProgress(percent: 2));
-    await tester.pump();
-    expect(
-      tester
-          .widget<LinearProgressIndicator>(find.byType(LinearProgressIndicator))
-          .value,
-      0.02,
-    );
-    expect(tester.takeException(), isNull);
-  });
+      expect(find.textContaining('57.81'), findsNothing);
+      task.setProgress(const DownloadProgress(percent: 2));
+      await tester.pump();
+      expect(
+        tester
+            .widget<LinearProgressIndicator>(
+              find.byType(LinearProgressIndicator),
+            )
+            .value,
+        0.02,
+      );
+      expect(tester.takeException(), isNull);
+    },
+  );
 
   testWidgets('download card size stays fixed when statistics change', (
     tester,

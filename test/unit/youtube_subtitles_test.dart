@@ -11,6 +11,7 @@ import 'package:universal_downloader/core/models/video_format.dart';
 import 'package:universal_downloader/core/process/cancel_token.dart';
 import 'package:universal_downloader/core/process/process_runner.dart';
 import 'package:universal_downloader/core/process/process_runner_result.dart';
+import 'package:universal_downloader/core/process/yt_dlp_progress_parser.dart';
 import 'package:universal_downloader/core/services/log_service.dart';
 import 'package:universal_downloader/core/utils/path_utils.dart';
 import 'package:universal_downloader/downloads/download_repository.dart';
@@ -264,6 +265,11 @@ void main() {
         isEmpty,
       );
       final stream = runner.calls.first;
+      expect(stream, contains('--progress'));
+      expect(
+        stream[stream.indexOf('--progress-template') + 1],
+        YtDlpProgressParser.progressTemplate,
+      );
       expect(
         stream.lastIndexOf('--no-write-subs'),
         greaterThan(stream.indexOf('--write-subs')),
