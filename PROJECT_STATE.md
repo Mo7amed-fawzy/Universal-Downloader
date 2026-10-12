@@ -1,6 +1,6 @@
 # Universal Downloader: Project State
 
-Last updated: 2026-10-11 (Africa/Cairo).
+Last updated: 2026-10-12 (Africa/Cairo).
 
 ## Current Checkpoint: Stable Download Progress
 
@@ -29,8 +29,13 @@ release build was run during this review.
 The progress fix and regression tests are committed as `52c0352` and pushed to
 `origin/main` through the existing `github-personal` SSH alias. The sandboxed
 push could not resolve github.com; the approved network retry succeeded.
-Origin's push URL uses SSH while fetch remains HTTPS. File-mode-only local
-changes remain untouched; committed source files retain non-executable modes.
+Origin's push URL uses SSH while fetch remains HTTPS.
+
+On 2026-10-12, the user explicitly requested committing all remaining file-mode
+changes. Review found 290 tracked files changing from 100644 to 100755, with no
+content changes, staged changes, or untracked files before this handoff update.
+These executable-bit changes are included in the repository housekeeping commit.
+No application tests or builds were rerun for this permissions-only follow-up.
 Use `git status -sb` for the current local/remote relationship.
 
 ## Previous Checkpoint: Audio Quality From Available Source Bitrates
