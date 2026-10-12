@@ -2,6 +2,199 @@
 
 Last updated: 2026-10-12 (Africa/Cairo).
 
+## Current Checkpoint: Reveal and Highlight Previous Download
+
+Clicking Already downloaded now routes to the exact matching completed task in
+Downloads. When multiple records match a video, the most recent completion is
+selected; multi-link input targets the first matched input video. A typed route
+argument carries the task ID. The warning remains a compact amber line below
+Provider and does not block downloading.
+
+Downloads keeps its header visible and opens its lazily built, variable-height
+history at the selected row using a centered sliver list. Original record order
+and access to records above/below are preserved without rendering the whole
+history or estimating row heights. A history scroll controller bounds the offset
+using the trailing sliver's measured extent: revealing a final row does not leave
+extra empty space below it, and short histories retain their normal placement.
+The bounds also update when the marker disappears. After the route transition
+finishes, an arrow and Downloaded before label appear above the card with a brief amber border/glow
+pulse. The label and border disappear three seconds after arrival, restoring the
+normal card without resetting the scroll position. Reduced motion shows a static
+marker for the same duration. Ordinary Downloads navigation has no marker.
+Removing the target clears the marker; timers, route/list listeners and
+controllers are disposed.
+
+Verified on 2026-10-12 after the spacing fix: reproduced extra trailing space
+with failing tests for 2-row and 30-row histories (212px and 492px differences).
+All 39 Home/Downloads widget tests now pass, including normal placement after
+revealing the final row and after marker expiry. The arrival tests still verify
+the 3-second duration, reduced motion, and lazy access to row 800 of 1000.
+Earlier history matching tests passed before these visual changes.
+Analysis and whitespace checks passed.
+Hot reload succeeded; no runtime errors were reported. No live download or
+release build was started. Next: use normally; no outstanding work for this request.
+
+Git checkpoint: the progress fix, optional multi-download mode, and previous
+download warning/navigation are saved as separate local commits, with related
+tests alongside each change. The historical HTML concept in `output/` remains
+untracked. No push was performed; this commit-only pass reused the validation
+above and checked staged diffs and whitespace without rerunning tests.
+
+## Previous Checkpoint: Previously Downloaded Video Warning
+
+Home shows a single-line Already downloaded warning immediately below Provider
+inside the URL card when a link matches a completed record in Downloads. It uses
+an amber icon/text (darker gold in light mode), without a panel or separate button.
+Clicking the warning opens Downloads; its tooltip names that action, and fetching/
+downloading remains available. Long text truncates to one line. The warning updates on
+typing, paste, clear, download completion, and history removal. It uses restored
+history as well as current-session completions. Queued/active/failed/cancelled
+tasks do not trigger it. A missing output file still counts as previously
+downloaded because this checks history, not file presence.
+
+YouTube watch/short/shorts/embed/live URL variants match the same video while
+ignoring tracking/timestamp parameters. www.youtu.be now shares the existing
+cache normalization. Other providers compare their source URLs without fragments;
+unrelated query parameters remain significant. Batch input counts unique matched
+videos, avoiding duplicate warnings for multiple records or URL aliases.
+
+Verified on 2026-10-12 after the compact layout revision: all four focused warning
+tests passed, including placement below Provider, navigation, light/dark 375px
+layouts at 1.3x text, and completion/removal updates. Analysis and whitespace
+checks passed; hot reload succeeded. The earlier 45 Home/history/cache tests
+passed before this visual revision. Those cover persisted history, URL variants and false
+matches, completion/removal updates, navigation, clearing, and 375px light/dark
+layouts at 1.3x text size. These exposed an existing provider-label overflow;
+the label now wraps within its row. Earlier runtime inspection found the warning
+for the current link. No live download or release
+build was started. Next: use normally; no outstanding work for this request.
+
+## Previous Checkpoint: Forward-only Stream Progress
+
+Reproduced percentage reversal (6% → 5.5%) and premature 100% with failing
+regression tests. yt-dlp now emits explicit progress fields; segmented streams
+use fragment index/count and ordinary streams use confirmed byte totals.
+Estimated file sizes remain statistics only, never the percentage denominator.
+Unknown totals retain the last bar position while reporting transferred bytes.
+In-flight percentages are capped at 99%; only a finished stream reports 100%.
+DownloadTask holds the highest valid percentage within a phase; changing phase
+or retrying resets it. Legacy text/fragment parsing supports already-running
+processes. This supersedes the estimate-following checkpoint below.
+
+Verified on 2026-10-12: all 46 progress/parser/YouTube subtitle pipeline/queue/
+downloads/completed-card tests passed, as did analysis and whitespace checks.
+A real yt-dlp localhost download of a generated four-fragment HLS video produced
+17 updates; the production Dart parser yielded 0 → 25 → 50 → 75 → 99 → 100
+without regression despite fluctuating estimated sizes. No remote download or
+release build was started. Hot reload succeeded; runtime inspection found no
+errors. The user's x86 vs ARM task already displayed Completed, so its in-flight
+behavior after this fix was not observed. Next: observe the next normal download.
+
+## Previous Checkpoint: Optional Multi-download Mode
+
+Settings → General now has a persisted Multi-download mode switch, off by
+default for both new and existing settings. Compared the original Home and URL
+card using `git show HEAD` with the working changes using `git diff`. Off restores
+the single URL / Fetch Info flow, automatically opens the video editor, applies
+saved quality/audio/container preferences, and queues one video with the original
+Downloads navigation. Enter fetches; Ctrl+Enter fetches or downloads. On retains
+the batch strip, per-video settings, and Download all workflow.
+
+Single and batch drafts remain separate in memory while Home is mounted and
+survive switching modes. Disabling batch mode hides its strip and prevents a
+pending batch fetch from auto-queueing hidden videos. Existing queue tasks are
+unaffected. The mode preference survives app restart; drafts do not.
+
+Verified on 2026-10-12: all 58 local Home, responsive layout, format selector,
+subtitle picker, and download manager tests passed. Covers settings UI toggling,
+preference persistence/default migration, single-video queue selections, Enter /
+Ctrl+Enter, automatic download navigation, and switching during a batch fetch.
+Analysis and `git diff --check` passed. Hot reload failed twice through the
+existing Flutter tooling session with `s1.reloadSources` error -32000; runtime
+error inspection reported none, but the new UI was not verified in the running
+Linux app. No restart, release build, or live download was performed.
+Next: relaunch the development app when current downloads are finished and
+check Settings → General → Multi-download mode in both positions.
+
+## Previous Checkpoint: Progress Corrects Early 100% Estimates
+
+Fixed DownloadTask retaining the highest percentage within a phase, which could
+pin the UI at 100% after yt-dlp revised its total-size estimate. Display progress
+now follows the latest finite percentage (bounded to 0–100); status-only messages
+still preserve numeric stats, and phase/retry resets remain unchanged. Estimates
+can decrease when the source corrects its total size. This supersedes the earlier
+monotonic-percentage behavior described under Stable Download Progress.
+
+Verified on 2026-10-12: the regression test failed before the fix (bar 1.0 instead
+of 0.05), then all 14 focused progress/queue/downloads/completed-card tests passed.
+Analysis and git diff whitespace checks passed. Read-only inspection of the two
+user-started Linux downloads confirmed raw/display values of 26.9/100 and
+14.3/100 before hot reload, and matching 31.1/31.1 and 16.5/16.5 afterward.
+Both remained in downloadingVideo; no restart/cancellation was performed and no
+runtime errors were reported. No new live download or release build was started.
+Next: observe progress through audio/merge/completion during normal use.
+
+## Previous Checkpoint: Batch Video Preparation
+
+Home keeps the original full video editor above a single horizontal Your videos
+strip. Add videos immediately creates pending cards in that strip and clears the
+URL field. Fetch/wait/error status and Retry live exclusively in those cards;
+the URL field and Add videos button remain available during metadata fetching.
+Metadata requests are processed sequentially, including links added mid-fetch.
+Removing a pending card prevents its async result from returning to the list.
+Duplicate input links and resolved provider/media IDs are deduplicated.
+
+Only clicking a ready video card selects its data for the main editor. Adding or
+finishing a fetch never auto-selects a video or replaces the current editor.
+The editor reuses MediaInfoCard, FormatSelectionCard, OutputFolderRow, and Download
+in their original order. Card selection scrolls back to that editor. Collapse
+hides only the strip; removing/queueing the selected draft clears its editor.
+Each ready draft owns its provider and HomeInput, with best video/audio defaults
+and saved language/container/output-directory preferences. Selections survive
+switching between cards.
+
+Download all queues ready drafts only; pending/failed fetch cards remain.
+Individual Download queues only the selected draft. Validation failures remain
+on their cards without changing selection. Existing download concurrency remains
+two. Auto-start, if enabled, queues newly fetched drafts after pending metadata
+is processed and leaves the user on Home instead of navigating during fetching.
+
+Verified on 2026-10-12: all 19 Home tests passed, including strip-only fetching,
+no automatic editor selection, adding links during fetch, removal of pending
+cards, card-level retry, deduplication, settings isolation, and batch queueing.
+Responsive tests cover 320/375/900/1162-pixel layouts, light/dark, 1.3x text and
+reduced animations. Analysis and git diff whitespace checks passed. Hot reload
+succeeded and no runtime errors were reported. The earlier 48 selector/audio/
+subtitle/queue/local merge tests remain historical; they were not rerun for this
+fetch-location correction. No live network download or release build was run.
+
+Drafts remain in memory while Home stays mounted; they are not restored after
+app exit. Queue restart recovery and desktop background/tray handling remain
+unimplemented. Next: review the restored editor and bottom video strip in the
+Linux app and exercise a real batch download. The earlier illustrative concept
+at `output/batch-download-concept.html` is historical; this task changed the app,
+not that prototype. No macOS platform implementation was added.
+
+## App Update Reference Review (2026-10-12)
+
+Reviewed source at
+`/home/abdin_02/Mohamed_tips/updates_app/Alrahma-CI-CD-main` at the user's request.
+Its Android update flow builds/releases APKs with GitHub Actions, reads Supabase
+update metadata at startup/every six hours, downloads an APK, and opens the native
+installer. Source observations: build numbers are ignored during comparison;
+SHA-256 is computed in CI but not passed through the active download flow;
+forced updates retain a Later button; the realtime listener passes inserted rows
+while its consumer expects an `action` field absent from the shown table schema.
+The workflow and embedded Edge Function example also disagree on release tags.
+These are source findings, not verified behavior of deployed services.
+
+Universal Downloader currently updates desktop tool bundles, not the application.
+Its Linux/Windows packagers already produce complete app archives and checksums;
+no `.github` workflow directory exists in this checkout. Suggested next step,
+only if requested: define app update metadata and platform installation behavior,
+reusing the existing release infrastructure. No app code changed, builds/tests
+run, remote services checked, or releases published during this review.
+
 ## Current Checkpoint: Relative Download Dates and Missing Files
 
 Completed cards show Just now for the first minute, Today/Yesterday with local
