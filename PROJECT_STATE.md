@@ -2,7 +2,43 @@
 
 Last updated: 2026-10-12 (Africa/Cairo).
 
-## Current Checkpoint: Stable Download Progress
+## Current Checkpoint: Relative Download Dates and Missing Files
+
+Completed cards show Just now for the first minute, Today/Yesterday with local
+time, and an absolute date for older downloads. A tooltip retains the full date
+and time, respecting the device's 12/24-hour preference. Calendar days are
+compared in local time, including month/year boundaries. Existing persisted
+completion timestamps are used without a database change.
+
+Linux/local-file checks run when cards mount or complete, every 15 seconds while
+visible, and on app resume. Missing or moved files show a File not found badge
+and hide Open location. Restoring the saved path restores the action. Opening
+also rechecks existence. Async results for replaced/disposed cards are ignored;
+timers and observers are disposed. Android content URIs remain unknown to this
+local-file check, preserving Open video; native URI existence checking is not
+implemented by this change.
+
+Remove and Clear finished require confirmation and explain that files stay on
+the device. The video's title was removed from the confirmation as requested.
+Cancel/dismissal preserves records. Bulk clearing snapshots finished task IDs,
+preserving active tasks and downloads that finish while the dialog is open.
+
+Verified on 2026-10-12: 30 focused tests passed across date formatting, real-file
+move/delete/restore checks, availability widgets, completed cards, confirmation,
+progress, and persisted history (27 initial passes, then 3 availability tests
+after correcting a test compilation error). Includes 320/360/1162-pixel layouts,
+resume/poll refresh, stale async results, and file preservation. Analysis and
+`git diff --check` passed. Hot reload succeeded; no runtime errors were reported.
+Flutter Driver remains disabled. No release build or live download was run.
+Commit review on 2026-10-12 organized the changes into history confirmation
+(`22d778e`), relative dates/file availability (`b6d2b34`), and this handoff.
+Staged diffs passed `git diff --check`; all 13 reviewed file contents matched the
+pre-commit snapshot before this handoff update. No application tests or builds
+were rerun during commit organization; validation above remains applicable.
+Next: review relative dates and missing-file badges in the Linux app. Use
+`git status -sb` for the current local/remote relationship.
+
+## Previous Checkpoint: Stable Download Progress
 
 DownloadTask keeps a separate monotonic displayed percentage for each phase,
 while retaining the latest raw size/percentage estimates. Status-only yt-dlp
