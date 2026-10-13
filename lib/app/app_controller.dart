@@ -10,6 +10,7 @@ import '../core/services/log_service.dart';
 import '../core/utils/path_utils.dart';
 import '../downloads/download_manager.dart';
 import '../downloads/download_history.dart';
+import '../downloads/download_recovery_store.dart';
 import '../downloads/download_repository.dart';
 import '../platform/download_platform.dart';
 import '../platform/download_platform_factory.dart';
@@ -91,6 +92,7 @@ class AppController extends ChangeNotifier {
       repository: repository,
       log: log,
       history: DownloadHistory(localDatabase),
+      recovery: DownloadRecoveryStore(localDatabase),
       publishDownload: (result, cancelToken) =>
           selectedPlatform.publishDownload(result, cancelToken: cancelToken),
     );
@@ -143,7 +145,7 @@ class AppController extends ChangeNotifier {
   Future<void> closeStorage() => _storageClose ??= _closeStorage();
 
   Future<void> _closeStorage() async {
-    await manager.flushHistory();
+    await manager.shutdown();
     await database.close();
   }
 

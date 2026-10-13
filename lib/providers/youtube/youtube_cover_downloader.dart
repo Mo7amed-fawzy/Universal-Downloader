@@ -1,4 +1,5 @@
 import 'dart:io';
+import 'dart:convert';
 
 import '../../core/errors/downloader_exceptions.dart';
 import '../../core/process/cancel_token.dart';
@@ -23,6 +24,14 @@ class YoutubeCoverDownloader {
       throw DownloadFailedException('The YouTube cover URL is invalid.');
     }
     final output = File('${directory.path}/cover.jpg');
+    final completed = File('${output.path}.complete');
+    if (output.existsSync() &&
+        output.lengthSync() > 0 &&
+        completed.existsSync() &&
+        await completed.readAsString() ==
+            jsonEncode([url.toString(), await output.length()])) {
+      return output;
+    }
     final result = await runner.run(
       executable: ffmpegPath,
       arguments: [
@@ -57,6 +66,10 @@ class YoutubeCoverDownloader {
         details: result.stderr,
       );
     }
+    await completed.writeAsString(
+      jsonEncode([url.toString(), await output.length()]),
+      flush: true,
+    );
     return output;
   }
 }

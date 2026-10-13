@@ -67,7 +67,7 @@ void main() {
       final version = await database
           .customSelect('PRAGMA user_version')
           .getSingle();
-      expect(version.data.values.single, 1);
+      expect(version.data.values.single, 2);
     },
   );
 

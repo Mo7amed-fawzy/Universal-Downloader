@@ -10,12 +10,13 @@ import '../../core/process/command_runner.dart';
 import '../../core/process/process_runner.dart';
 import '../../core/services/log_service.dart';
 import '../../core/services/media_assembler.dart';
+import '../../core/services/media_file_publisher.dart';
 import '../../core/tools/media_tools.dart';
-import '../../downloads/download_progress.dart';
 import '../../downloads/download_repository.dart';
 import '../../downloads/download_task_state.dart';
 import '../downloader_provider.dart';
 import '../tool_configurable_provider.dart';
+import 'direct_file_downloader.dart';
 
 /// Handles direct media URLs (e.g. https://example.com/video.mp4) without a
 /// site-specific extractor, by streaming the file over HTTP.
@@ -136,13 +137,21 @@ class DirectMediaProvider
     required CancelToken cancelToken,
   }) async {
     final taskId = options.taskId;
+    cancelToken.throwIfCancelled();
+    final recovered = await repository.loadVerifiedResult(taskId);
+    if (recovered != null) return recovered;
     final tempDir = repository.createTaskDirectory(taskId);
     final tmpFile = File('${tempDir.path}/direct.tmp');
 
     try {
       onPhase(DownloadTaskState.downloadingVideo);
       log.info('Downloading direct file from ${media.pageUrl}');
-      await _streamDownload(media.pageUrl, tmpFile, onProgress, cancelToken);
+      await const DirectFileDownloader().download(
+        media.pageUrl,
+        tmpFile,
+        onProgress,
+        cancelToken,
+      );
 
       onPhase(DownloadTaskState.verifying);
       final ext = media.videoFormats.isEmpty
@@ -154,17 +163,12 @@ class DirectMediaProvider
         extension: ext,
         overwrite: options.overwrite,
       );
-      log.info('Moving to $outputPath');
-      if (File(outputPath).existsSync()) File(outputPath).deleteSync();
-      tmpFile.renameSync(outputPath);
-      final outputFile = File(outputPath);
-
       final assembler = MediaAssembler(
         ffmpegPath: '/nonexistent',
         ffprobePath: ffprobePath,
         runner: runner,
       );
-      final report = await assembler.verify(outputFile);
+      final report = await assembler.verify(tmpFile);
       if (!report.passed) {
         throw VerificationException(
           'The downloaded file failed verification. It was kept for inspection.',
@@ -172,9 +176,16 @@ class DirectMediaProvider
         );
       }
 
+      cancelToken.throwIfCancelled();
+      final outputFile = await const MediaFilePublisher().publish(
+        tmpFile,
+        outputPath,
+        cancelToken,
+      );
       log.info('Direct download completed: ${outputFile.path}');
-      repository.cleanupTaskDirectory(taskId);
-      return DownloadTaskResult(outputFile: outputFile, merged: false);
+      final result = DownloadTaskResult(outputFile: outputFile, merged: false);
+      await repository.saveVerifiedResult(taskId, result);
+      return result;
     } catch (e) {
       if (e is DownloadCancelledException) {
         log.info('Direct download cancelled (task $taskId)');
@@ -182,54 +193,6 @@ class DirectMediaProvider
       }
       log.error('Direct download failed (task $taskId): $e');
       rethrow;
-    }
-  }
-
-  Future<void> _streamDownload(
-    Uri url,
-    File output,
-    ProgressCallback onProgress,
-    CancelToken cancelToken,
-  ) async {
-    final client = HttpClient()..autoUncompress = false;
-    try {
-      final request = await client.getUrl(url);
-      request.followRedirects = true;
-      request.maxRedirects = 5;
-
-      final response = await request.close();
-      if (response.statusCode < 200 || response.statusCode >= 300) {
-        throw NetworkException(
-          'Server returned HTTP ${response.statusCode} for the media URL.',
-        );
-      }
-
-      final total = response.contentLength > 0 ? response.contentLength : null;
-      final sink = output.openWrite();
-      var downloaded = 0;
-
-      try {
-        await for (final chunk in response) {
-          cancelToken.throwIfCancelled();
-          sink.add(chunk);
-          downloaded += chunk.length;
-          onProgress(
-            DownloadProgress(
-              percent: total == null ? null : (downloaded / total) * 100,
-              downloadedBytes: downloaded,
-              totalBytes: total,
-            ),
-          );
-        }
-      } finally {
-        await sink.close();
-      }
-
-      if (cancelToken.isCancelled) {
-        throw DownloadCancelledException();
-      }
-    } finally {
-      client.close(force: true);
     }
   }
 

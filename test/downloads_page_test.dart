@@ -22,6 +22,84 @@ import 'support/controlled_download_provider.dart';
 import 'support/persistence_fixtures.dart';
 
 void main() {
+  for (final brightness in Brightness.values) {
+    testWidgets('restored download resumes at 375px in $brightness', (
+      tester,
+    ) async {
+      tester.view.physicalSize = const Size(375, 850);
+      tester.view.devicePixelRatio = 1;
+      addTearDown(tester.view.resetPhysicalSize);
+      addTearDown(tester.view.resetDevicePixelRatio);
+      final root = Directory.systemTemp.createTempSync('resume_ui_');
+      addTearDown(() => root.deleteSync(recursive: true));
+      final provider = ControlledDownloadProvider();
+      final manager = DownloadManager(
+        registry: ProviderRegistry([provider]),
+        repository: DownloadRepository(paths: QueueTestPaths(root)),
+        log: LogService(paths: QueueTestPaths(root)),
+      );
+      addTearDown(manager.dispose);
+      manager.add(
+        provider: provider,
+        media: MediaInfo(
+          id: 'resume',
+          title: 'Interrupted video',
+          providerId: provider.id,
+          providerName: provider.displayName,
+          pageUrl: Uri.parse('https://example.com/video'),
+        ),
+        options: DownloadOptions(
+          taskId: 'resume',
+          outputDirectory: root.path,
+          title: 'Interrupted video',
+          videoFormatId: 'video',
+        ),
+        videoLabel: '720p',
+        audioLabel: 'Arabic',
+      );
+      provider.calls.single.completeError(
+        DownloadFailedException('Disconnected'),
+      );
+      await tester.pump();
+      manager.tasks.single.markInterrupted();
+      await tester.pumpWidget(
+        ChangeNotifierProvider<AppController>.value(
+          value: QueueTestController(manager),
+          child: MaterialApp(
+            theme: ThemeData(brightness: brightness),
+            builder: (context, child) => MediaQuery(
+              data: MediaQuery.of(
+                context,
+              ).copyWith(textScaler: const TextScaler.linear(1.3)),
+              child: child!,
+            ),
+            home: const DownloadsPage(),
+          ),
+        ),
+      );
+      await tester.pumpAndSettle();
+      expect(
+        find.text('Download interrupted. Resume to continue.'),
+        findsOneWidget,
+      );
+      expect(find.byTooltip('Resume'), findsOneWidget);
+      await tester.tap(find.byTooltip('Resume'));
+      await tester.pump();
+      expect(provider.calls, hasLength(2));
+      expect(find.byTooltip('Resume'), findsNothing);
+      provider.calls.last.completeError(NetworkException('Disconnected'));
+      await tester.pump();
+      expect(find.textContaining('Retry 1 in 5s'), findsOneWidget);
+      await tester.tap(find.byTooltip('Cancel'));
+      await tester.pumpAndSettle();
+      expect(manager.tasks.single.state, DownloadTaskState.waitingForRetry);
+      await tester.tap(find.text('Cancel download'));
+      await tester.pumpAndSettle();
+      expect(manager.tasks.single.state, DownloadTaskState.cancelled);
+      expect(tester.takeException(), isNull);
+    });
+  }
+
   for (final taskCount in [2, 30]) {
     testWidgets(
       'revealing the last row keeps normal spacing with $taskCount downloads',

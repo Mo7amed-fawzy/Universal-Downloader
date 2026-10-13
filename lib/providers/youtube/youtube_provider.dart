@@ -1,6 +1,8 @@
 import 'dart:convert';
 import 'dart:io';
 
+import 'package:crypto/crypto.dart';
+
 import '../../core/errors/downloader_exceptions.dart';
 import '../../core/models/audio_format.dart';
 import '../../core/models/download_options.dart';
@@ -11,8 +13,11 @@ import '../../core/process/process_runner.dart';
 import '../../core/process/yt_dlp_progress_parser.dart';
 import '../../core/services/log_service.dart';
 import '../../core/services/media_assembler.dart';
+import '../../core/services/media_file_publisher.dart';
 import '../../core/tools/media_tools.dart';
 import '../../downloads/download_repository.dart';
+import '../../downloads/download_progress.dart';
+import '../../downloads/download_retry_policy.dart';
 import '../../downloads/download_task_state.dart';
 import '../downloader_provider.dart';
 import '../tool_configurable_provider.dart';
@@ -144,8 +149,11 @@ class YoutubeProvider implements DownloaderProvider, ToolConfigurableProvider {
     required CancelToken cancelToken,
   }) async {
     final taskId = options.taskId;
+    cancelToken.throwIfCancelled();
+    final recovered = await _repository.loadVerifiedResult(taskId);
+    if (recovered != null) return recovered;
     final tempDir = _repository.createTaskDirectory(taskId);
-    final videoTmp = File('${tempDir.path}/video.tmp');
+    var videoTmp = File('${tempDir.path}/video.tmp');
 
     // Check if the audio format is an m3u8 progressive stream.
     // Synthetic audio format ids start with "m3u8-" and carry the real
@@ -215,7 +223,7 @@ class YoutubeProvider implements DownloaderProvider, ToolConfigurableProvider {
       onPhase(DownloadTaskState.downloadingVideo);
       _log.info('Downloading video stream ${options.videoFormatId}');
       try {
-        await _downloadStream(
+        videoTmp = await _downloadStream(
           media.pageUrl,
           options.videoFormatId,
           videoTmp,
@@ -238,7 +246,7 @@ class YoutubeProvider implements DownloaderProvider, ToolConfigurableProvider {
         _log.info(
           'Remapped video format ${options.videoFormatId} → $remappedId',
         );
-        await _downloadStream(
+        videoTmp = await _downloadStream(
           media.pageUrl,
           remappedId,
           videoTmp,
@@ -256,7 +264,7 @@ class YoutubeProvider implements DownloaderProvider, ToolConfigurableProvider {
         _log.info('Downloading audio stream $sourceAudioId');
         audioTmp = File('${tempDir.path}/audio.tmp');
         try {
-          await _downloadStream(
+          audioTmp = await _downloadStream(
             media.pageUrl,
             sourceAudioId,
             audioTmp,
@@ -276,10 +284,10 @@ class YoutubeProvider implements DownloaderProvider, ToolConfigurableProvider {
           );
           if (remappedId == null || remappedId == audioFormatId) rethrow;
           _log.info('Remapped audio format $audioFormatId → $remappedId');
-          await _downloadStream(
+          audioTmp = await _downloadStream(
             media.pageUrl,
             remappedId,
-            audioTmp,
+            audioTmp!,
             cancelToken,
             onProgress,
             extractorArgs: audioArgs,
@@ -344,12 +352,11 @@ class YoutubeProvider implements DownloaderProvider, ToolConfigurableProvider {
           );
         } else {
           _log.info('Moving combined stream to $outputPath');
-          if (videoTmp.path != outputPath) {
-            final existing = File(outputPath);
-            if (existing.existsSync()) existing.deleteSync();
-            videoTmp.renameSync(outputPath);
-          }
-          outputFile = File(outputPath);
+          outputFile = await const MediaFilePublisher().publish(
+            videoTmp,
+            outputPath,
+            cancelToken,
+          );
         }
       }
 
@@ -387,14 +394,14 @@ class YoutubeProvider implements DownloaderProvider, ToolConfigurableProvider {
         sidecarFiles.add(await subtitleTmp.copy(subtitleOutput.path));
       }
 
-      // 6. Cleanup temp files only after successful verification.
       _log.info('Download completed: ${outputFile.path}');
-      _repository.cleanupTaskDirectory(taskId);
-      return DownloadTaskResult(
+      final result = DownloadTaskResult(
         outputFile: outputFile,
         merged: audioTmp != null,
         sidecarFiles: sidecarFiles,
       );
+      await _repository.saveVerifiedResult(taskId, result);
+      return result;
     } catch (e) {
       if (e is DownloadCancelledException) {
         _log.info('Download cancelled (task $taskId)');
@@ -406,7 +413,7 @@ class YoutubeProvider implements DownloaderProvider, ToolConfigurableProvider {
     }
   }
 
-  Future<void> _downloadStream(
+  Future<File> _downloadStream(
     Uri url,
     String formatId,
     File output,
@@ -415,9 +422,42 @@ class YoutubeProvider implements DownloaderProvider, ToolConfigurableProvider {
     List<String>? extractorArgs,
   }) async {
     final baseArgs = extractorArgs ?? YoutubeExtractor.downloadBaseArgs();
+    final identity = sha256.convert(
+      utf8.encode(jsonEncode([url.toString(), formatId, baseArgs])),
+    );
+    final directory = Directory('${output.parent.path}/streams/$identity');
+    await directory.create(recursive: true);
+    output = File('${directory.path}/${output.uri.pathSegments.last}');
+    final completed = File('${output.path}.complete');
+    cancelToken.throwIfCancelled();
+    if (output.existsSync() &&
+        completed.existsSync() &&
+        await completed.readAsString() == '${await output.length()}' &&
+        await output.length() > 0) {
+      onProgress(
+        DownloadProgress(
+          percent: 100,
+          downloadedBytes: await output.length(),
+          totalBytes: await output.length(),
+        ),
+      );
+      return output;
+    }
     final args = [
       ...baseArgs,
       ..._extraArgList,
+      '--continue',
+      '--part',
+      '--no-overwrites',
+      '--abort-on-unavailable-fragments',
+      '--socket-timeout',
+      '20',
+      '--retries',
+      '3',
+      '--fragment-retries',
+      '3',
+      '--retry-sleep',
+      'exp=1:8',
       '--no-write-subs',
       '--no-write-auto-subs',
       '--no-embed-subs',
@@ -447,6 +487,12 @@ class YoutubeProvider implements DownloaderProvider, ToolConfigurableProvider {
     );
 
     if (!result.success) {
+      if (DownloadRetryPolicy.isNetworkMessage(result.stderr)) {
+        throw NetworkException(
+          'The network connection was interrupted.',
+          details: _tail(result.stderr),
+        );
+      }
       throw DownloadFailedException(
         'Failed to download the selected stream.',
         details: _tail(result.stderr),
@@ -458,6 +504,8 @@ class YoutubeProvider implements DownloaderProvider, ToolConfigurableProvider {
         details: _tail(result.stderr),
       );
     }
+    await completed.writeAsString('${await output.length()}', flush: true);
+    return output;
   }
 
   /// Re-extracts metadata and finds a format matching the original by

@@ -219,6 +219,73 @@ void main() {
     }
 
     test(
+      'merge retry reuses complete streams and completed receipt prevents duplicates',
+      () async {
+        runner.mergeFails = true;
+        await expectLater(
+          download(separateAudio: true, cover: true, subtitle: automatic),
+          throwsA(isA<MergeException>()),
+        );
+        expect(runner.calls.where((args) => args.contains('-f')), hasLength(2));
+        runner.calls.clear();
+        runner.mergeFails = false;
+        final output = await download(
+          separateAudio: true,
+          cover: true,
+          subtitle: automatic,
+        );
+        expect(runner.calls.where((args) => args.contains('-f')), isEmpty);
+        expect(
+          runner.calls.any(
+            (args) =>
+                args.contains('--sub-langs') || args.contains('-frames:v'),
+          ),
+          isFalse,
+        );
+        expect(runner.calls.any((args) => args.contains('copy')), isTrue);
+        runner.calls.clear();
+        final recovered = await download(
+          separateAudio: true,
+          cover: true,
+          subtitle: automatic,
+        );
+        expect(recovered.path, output.path);
+        expect(runner.calls, isEmpty);
+        expect(File('${root.path}/Video (1).mp4').existsSync(), isFalse);
+      },
+    );
+
+    test(
+      'transient stream error preserves its resume path without format remapping',
+      () async {
+        runner.videoNetworkFails = true;
+        await expectLater(
+          download(separateAudio: true),
+          throwsA(isA<NetworkException>()),
+        );
+        final original = runner.calls.single;
+        expect(
+          original,
+          containsAll([
+            '--continue',
+            '--part',
+            '--abort-on-unavailable-fragments',
+          ]),
+        );
+        final path = original[original.indexOf('-o') + 1];
+        expect(File('$path.part').readAsStringSync(), 'partial');
+        runner.videoNetworkFails = false;
+        await download(separateAudio: true);
+        final retry = runner.calls[1];
+        expect(retry[retry.indexOf('-o') + 1], path);
+        expect(
+          runner.calls.any((args) => args.contains('--dump-single-json')),
+          isFalse,
+        );
+      },
+    );
+
+    test(
       'audio retry keeps the selected language, bitrate and codec',
       () async {
         runner.failAudio = true;
@@ -235,7 +302,12 @@ void main() {
         ];
         final output = await download(separateAudio: true);
         expect(output.existsSync(), isTrue);
-        final audioCalls = runner.calls.where((args) => args.contains('-f'));
+        final audioCalls = runner.calls
+            .where((args) => args.contains('-f'))
+            .toList();
+        final originalPath = audioCalls[1][audioCalls[1].indexOf('-o') + 1];
+        final remappedPath = audioCalls[2][audioCalls[2].indexOf('-o') + 1];
+        expect(remappedPath, isNot(originalPath));
         expect(audioCalls.map((args) => args[args.indexOf('-f') + 1]), [
           'video',
           'audio',
@@ -375,8 +447,8 @@ void main() {
         expect(phases.first, DownloadTaskState.downloadingSubtitles);
         expect(phases, contains(DownloadTaskState.merging));
         expect(
-          Directory('${root.path}/temp/download_task_task').existsSync(),
-          isFalse,
+          File('${root.path}/temp/download_task_task/result.json').existsSync(),
+          isTrue,
         );
       });
     }
@@ -495,6 +567,8 @@ class SubtitleProcessRunner extends ProcessRunner {
   bool cancelSubtitles = false;
   bool verificationFails = false;
   bool failAudio = false;
+  bool mergeFails = false;
+  bool videoNetworkFails = false;
   List<Map<String, Object>> refreshedAudio = [];
   int videoHeight = 720;
 
@@ -508,6 +582,23 @@ class SubtitleProcessRunner extends ProcessRunner {
     String? workingDirectory,
   }) async {
     calls.add(arguments);
+    if (mergeFails && executable == 'ffmpeg' && arguments.contains('copy')) {
+      return const ProcessRunnerResult(
+        exitCode: 1,
+        stdout: '',
+        stderr: 'interrupted merge',
+      );
+    }
+    if (videoNetworkFails && arguments.contains('-f')) {
+      File(
+        '${arguments[arguments.indexOf('-o') + 1]}.part',
+      ).writeAsStringSync('partial');
+      return const ProcessRunnerResult(
+        exitCode: 1,
+        stdout: '',
+        stderr: 'Connection reset',
+      );
+    }
     if (arguments.contains('--dump-single-json')) {
       return ProcessRunnerResult(
         exitCode: 0,

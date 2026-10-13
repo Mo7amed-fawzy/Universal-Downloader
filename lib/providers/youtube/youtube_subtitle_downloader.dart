@@ -1,4 +1,5 @@
 import 'dart:io';
+import 'dart:convert';
 
 import '../../core/errors/downloader_exceptions.dart';
 import '../../core/models/subtitle_track.dart';
@@ -34,6 +35,19 @@ class YoutubeSubtitleDownloader {
     final output = File(
       '${directory.path}/subtitles.${track.language}.${track.extension}',
     );
+    final completed = File('${output.path}.complete');
+    if (output.existsSync() &&
+        output.lengthSync() > 0 &&
+        completed.existsSync() &&
+        await completed.readAsString() ==
+            jsonEncode([
+              url.toString(),
+              track.id,
+              track.extension,
+              await output.length(),
+            ])) {
+      return output;
+    }
     if (output.existsSync()) output.deleteSync();
     final outputTemplate =
         '${directory.path.replaceAll('%', '%%')}/subtitles.%(ext)s';
@@ -88,6 +102,15 @@ class YoutubeSubtitleDownloader {
         details: result.stderr,
       );
     }
+    await completed.writeAsString(
+      jsonEncode([
+        url.toString(),
+        track.id,
+        track.extension,
+        await output.length(),
+      ]),
+      flush: true,
+    );
     return output;
   }
 }

@@ -1,13 +1,73 @@
 import 'dart:io';
+import 'dart:convert';
 
 import '../core/errors/downloader_exceptions.dart';
 import '../core/utils/path_utils.dart';
+import '../providers/downloader_provider.dart';
 
 /// Manages temporary working directories and final output naming.
 class DownloadRepository {
   DownloadRepository({PathUtils? paths}) : _paths = paths ?? const PathUtils();
 
   final PathUtils _paths;
+
+  Future<void> saveVerifiedResult(
+    String taskId,
+    DownloadTaskResult result,
+  ) async {
+    final directory = createTaskDirectory(taskId);
+    final pending = File('${directory.path}/result.new');
+    await pending.writeAsString(
+      jsonEncode({
+        'version': 1,
+        'output': result.outputFile.path,
+        'merged': result.merged,
+        'files': [
+          for (final file in [result.outputFile, ...result.sidecarFiles])
+            {'path': file.path, 'length': await file.length()},
+        ],
+      }),
+      flush: true,
+    );
+    await pending.rename('${directory.path}/result.json');
+  }
+
+  Future<DownloadTaskResult?> loadVerifiedResult(String taskId) async {
+    final receipt = File(
+      '${_paths.taskTempDirectory(taskId).path}/result.json',
+    );
+    if (!receipt.existsSync()) return null;
+    try {
+      final json = jsonDecode(await receipt.readAsString());
+      if (json is! Map<String, Object?> ||
+          json['version'] != 1 ||
+          json['files'] is! List<Object?> ||
+          json['merged'] is! bool) {
+        return null;
+      }
+      final files = <File>[];
+      for (final entry in json['files'] as List<Object?>) {
+        if (entry is! Map<String, Object?> || entry['path'] is! String) {
+          return null;
+        }
+        final file = File(entry['path'] as String);
+        if (!file.existsSync() || await file.length() != entry['length']) {
+          return null;
+        }
+        files.add(file);
+      }
+      if (files.isEmpty || files.first.path != json['output']) return null;
+      return DownloadTaskResult(
+        outputFile: files.first,
+        merged: json['merged'] as bool,
+        sidecarFiles: files.skip(1).toList(),
+      );
+    } on FormatException {
+      return null;
+    } on FileSystemException {
+      return null;
+    }
+  }
 
   /// Creates (or reuses) the working directory for [taskId].
   Directory createTaskDirectory(String taskId) {

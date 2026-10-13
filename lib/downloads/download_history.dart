@@ -16,26 +16,31 @@ class DownloadHistory {
     if (task.state != DownloadTaskState.completed || task.outputPath == null) {
       return;
     }
-    await database
-        .into(database.downloadRecords)
-        .insertOnConflictUpdate(
-          DownloadRecordsCompanion.insert(
-            taskId: task.id,
-            mediaId: task.media.id,
-            providerId: task.providerId,
-            providerName: task.providerName,
-            title: task.media.title,
-            sourceUrl: task.media.pageUrl.toString(),
-            thumbnailUrl: Value(task.media.thumbnail?.toString()),
-            durationMilliseconds: Value(task.media.duration?.inMilliseconds),
-            videoLabel: task.videoLabel,
-            audioLabel: task.audioLabel,
-            outputLocation: task.outputPath!,
-            optionsJson: _codec.encodeOptions(task.options),
-            startedAt: Value(task.startedAt),
-            completedAt: task.completedAt!,
-          ),
-        );
+    await database.transaction(() async {
+      await database
+          .into(database.downloadRecords)
+          .insertOnConflictUpdate(
+            DownloadRecordsCompanion.insert(
+              taskId: task.id,
+              mediaId: task.media.id,
+              providerId: task.providerId,
+              providerName: task.providerName,
+              title: task.media.title,
+              sourceUrl: task.media.pageUrl.toString(),
+              thumbnailUrl: Value(task.media.thumbnail?.toString()),
+              durationMilliseconds: Value(task.media.duration?.inMilliseconds),
+              videoLabel: task.videoLabel,
+              audioLabel: task.audioLabel,
+              outputLocation: task.outputPath!,
+              optionsJson: _codec.encodeOptions(task.options),
+              startedAt: Value(task.startedAt),
+              completedAt: task.completedAt!,
+            ),
+          );
+      await (database.delete(
+        database.pendingDownloads,
+      )..where((row) => row.taskId.equals(task.id))).go();
+    });
   }
 
   Future<List<DownloadTask>> load() async {

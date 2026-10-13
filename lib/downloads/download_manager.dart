@@ -12,6 +12,8 @@ import '../providers/provider_registry.dart';
 import '../providers/youtube/youtube_cache_key.dart';
 import 'download_queue.dart';
 import 'download_history.dart';
+import 'download_recovery_store.dart';
+import 'download_retry_policy.dart';
 import 'download_repository.dart';
 import 'download_task.dart';
 import 'download_task_state.dart';
@@ -26,6 +28,14 @@ class DownloadManager extends ChangeNotifier {
     DownloadQueue? queue,
     this.publishDownload,
     this.history,
+    this.recovery,
+    this.retryDelays = const [
+      Duration(seconds: 5),
+      Duration(seconds: 15),
+      Duration(seconds: 30),
+      Duration(minutes: 1),
+      Duration(minutes: 2),
+    ],
   }) : queue = queue ?? DownloadQueue();
 
   final ProviderRegistry registry;
@@ -33,6 +43,13 @@ class DownloadManager extends ChangeNotifier {
   final LogService log;
   final DownloadQueue queue;
   final DownloadHistory? history;
+  final DownloadRecoveryStore? recovery;
+  final List<Duration> retryDelays;
+  final Set<String> _savingIds = {};
+  final Set<String> _pauseRequestedIds = {};
+  final Map<String, Timer> _retryTimers = {};
+  final Set<Future<void>> _executions = {};
+  bool _closing = false;
   String? historyError;
   Future<void> _historyWrites = Future.value();
   final Future<String> Function(DownloadTaskResult, CancelToken)?
@@ -87,10 +104,19 @@ class DownloadManager extends ChangeNotifier {
     for (final task in restored) {
       if (queue.byId(task.id) == null) queue.add(task);
     }
+    for (final task in await recovery?.load() ?? const <DownloadTask>[]) {
+      if (queue.byId(task.id) == null) queue.add(task);
+    }
     notifyListeners();
   }
 
-  Future<void> flushHistory() => _historyWrites;
+  Future<void> flushHistory() async {
+    Future<void> pending;
+    do {
+      pending = _historyWrites;
+      await pending;
+    } while (pending != _historyWrites);
+  }
 
   Future<bool> _writeHistory(Future<void> Function() write) {
     final operation = _historyWrites.then((_) async {
@@ -99,9 +125,9 @@ class DownloadManager extends ChangeNotifier {
         return true;
       } catch (error) {
         historyError =
-            'Could not update download history. Check available storage.';
+            'Could not save downloads. Check available storage before retrying.';
         log.error('Could not update download history: $error');
-        notifyListeners();
+        if (!_closing) notifyListeners();
         return false;
       }
     });
@@ -117,6 +143,7 @@ class DownloadManager extends ChangeNotifier {
     required String videoLabel,
     required String audioLabel,
   }) {
+    if (_closing) return;
     final task = DownloadTask(
       id: options.taskId,
       media: media,
@@ -130,23 +157,88 @@ class DownloadManager extends ChangeNotifier {
     log.info(
       'Queued task ${task.id}: ${media.title} ($videoLabel / $audioLabel)',
     );
-    _pump();
+    _prepare(task);
+  }
+
+  void _prepare(DownloadTask task) {
+    final store = recovery;
+    if (store == null) {
+      _pump();
+      return;
+    }
+    _savingIds.add(task.id);
+    unawaited(
+      _writeHistory(() => store.save(task)).then((saved) {
+        _savingIds.remove(task.id);
+        if (_closing) return;
+        if (!saved && task.state == DownloadTaskState.queued) {
+          task.markFailed(
+            FilesystemException(
+              'Could not save this download for recovery. Free some space and retry.',
+            ),
+          );
+        }
+        _pump();
+      }),
+    );
+    notifyListeners();
+  }
+
+  void pause(String taskId) {
+    final task = queue.byId(taskId);
+    if (_closing ||
+        task == null ||
+        !task.state.isActive ||
+        task.state == DownloadTaskState.pausing ||
+        task.cancelToken.isCancelled) {
+      return;
+    }
+    log.info('Pausing task $taskId');
+    _retryTimers.remove(taskId)?.cancel();
+    task.cancelToken.cancel();
+    if (_runningIds.contains(taskId)) {
+      _pauseRequestedIds.add(taskId);
+      task.markPausing();
+    } else {
+      task.markPaused();
+    }
+    notifyListeners();
   }
 
   /// Requests cancellation of a task (terminates yt-dlp / ffmpeg).
   void cancel(String taskId) {
     final task = queue.byId(taskId);
-    if (task == null) return;
-    if (task.state.isActive) {
+    if (_closing || task == null) return;
+    if (task.state.isActive ||
+        task.state == DownloadTaskState.paused ||
+        task.state == DownloadTaskState.interrupted) {
       log.info('Cancelling task $taskId');
+      _pauseRequestedIds.remove(taskId);
       task.cancelToken.cancel();
+      if (!_runningIds.contains(task.id)) {
+        _retryTimers.remove(task.id)?.cancel();
+        task.markCancelled();
+        final store = recovery;
+        if (store != null) {
+          unawaited(_writeHistory(() => store.remove(task.id)));
+        }
+        repository.cleanupTaskDirectory(task.id);
+        _pump();
+      }
     }
   }
 
   /// Retries a failed task, reusing any preserved temporary files.
   Future<void> retry(String taskId) async {
     final task = queue.byId(taskId);
-    if (task == null || task.state != DownloadTaskState.failed) return;
+    if (_closing ||
+        task == null ||
+        _runningIds.contains(taskId) ||
+        (task.state != DownloadTaskState.failed &&
+            task.state != DownloadTaskState.paused &&
+            task.state != DownloadTaskState.interrupted)) {
+      return;
+    }
 
     final provider = registry.byId(task.providerId);
     if (provider == null) {
@@ -161,17 +253,27 @@ class DownloadManager extends ChangeNotifier {
 
     log.info('Retrying task $taskId');
     task.resetForRetry();
-    _pump();
+    task.retryAttempt = 0;
+    _prepare(task);
   }
 
   /// Removes a task from the queue.
   Future<void> remove(String taskId) async {
     final task = queue.byId(taskId);
-    if (task == null || task.state.isActive) return;
+    if (task == null || task.state.isActive || _runningIds.contains(taskId)) {
+      return;
+    }
     final store = history;
     if (store != null && !await _writeHistory(() => store.remove(taskId))) {
       return;
     }
+    final recoveryStore = recovery;
+    if (recoveryStore != null &&
+        !await _writeHistory(() => recoveryStore.remove(taskId))) {
+      return;
+    }
+    _retryTimers.remove(taskId)?.cancel();
+    repository.cleanupTaskDirectory(taskId);
     queue.remove(taskId);
     _runningIds.remove(taskId);
     notifyListeners();
@@ -179,9 +281,10 @@ class DownloadManager extends ChangeNotifier {
 
   /// Starts queued tasks while execution slots are free.
   void _pump() {
+    if (_closing) return;
     notifyListeners();
     final pending = queue.pending.where(
-      (task) => !_runningIds.contains(task.id),
+      (task) => !_runningIds.contains(task.id) && !_savingIds.contains(task.id),
     );
     if (pending.isEmpty) return;
 
@@ -199,42 +302,128 @@ class DownloadManager extends ChangeNotifier {
         continue;
       }
       _runningIds.add(task.id);
-      unawaited(_execute(task, provider));
+      final execution = _execute(task, provider);
+      _executions.add(execution);
+      unawaited(execution.then((_) => _executions.remove(execution)));
     }
     notifyListeners();
   }
 
   Future<void> _execute(DownloadTask task, DownloaderProvider provider) async {
+    final cancelToken = task.cancelToken;
     task.markStarted();
     notifyListeners();
     try {
       final result = await provider.download(
         task.media,
         task.options,
-        onPhase: task.setPhase,
-        onProgress: task.setProgress,
-        cancelToken: task.cancelToken,
+        onPhase: (phase) {
+          if (!cancelToken.isCancelled) task.setPhase(phase);
+        },
+        onProgress: (progress) {
+          if (!cancelToken.isCancelled) task.setProgress(progress);
+        },
+        cancelToken: cancelToken,
       );
+      if (_closing) return;
+      cancelToken.throwIfCancelled();
       final location =
-          await publishDownload?.call(result, task.cancelToken) ??
+          await publishDownload?.call(result, cancelToken) ??
           result.outputFile.path;
+      if (_closing) return;
+      cancelToken.throwIfCancelled();
       task.markCompleted(location);
       final store = history;
-      if (store != null) unawaited(_writeHistory(() => store.save(task)));
+      if (store != null) {
+        final saved = await _writeHistory(() => store.save(task));
+        if (saved) repository.cleanupTaskDirectory(task.id);
+      } else {
+        if (recovery != null) {
+          await _writeHistory(() => recovery!.remove(task.id));
+        }
+        repository.cleanupTaskDirectory(task.id);
+      }
     } on DownloadCancelledException {
-      task.markCancelled();
-      repository.cleanupTaskDirectory(task.id);
+      if (_closing) return;
+      await _finishCancellation(task);
     } on DownloaderException catch (e) {
-      task.markFailed(e);
+      if (_closing) return;
+      if (cancelToken.isCancelled) {
+        await _finishCancellation(task);
+        return;
+      }
+      _failOrRetry(task, e);
       log.error('Task ${task.id} failed: ${e.message}');
     } catch (e, st) {
-      task.markFailed(
-        UnexpectedException('An unexpected error occurred.'),
-        technicalDetails: '$e\n$st',
+      if (_closing) return;
+      if (cancelToken.isCancelled) {
+        await _finishCancellation(task);
+        return;
+      }
+      _failOrRetry(
+        task,
+        DownloadRetryPolicy.isRetryable(e)
+            ? NetworkException(
+                'The network connection was interrupted.',
+                details: '$e',
+              )
+            : UnexpectedException(
+                'An unexpected error occurred.',
+                details: '$e\n$st',
+              ),
       );
       log.error('Task ${task.id} crashed: $e');
+    } finally {
+      _pauseRequestedIds.remove(task.id);
+      _runningIds.remove(task.id);
+      _pump();
     }
-    _runningIds.remove(task.id);
-    _pump();
+  }
+
+  Future<void> _finishCancellation(DownloadTask task) async {
+    if (_pauseRequestedIds.remove(task.id)) {
+      task.markPaused();
+      return;
+    }
+    task.markCancelled();
+    if (recovery != null) {
+      await _writeHistory(() => recovery!.remove(task.id));
+    }
+    repository.cleanupTaskDirectory(task.id);
+  }
+
+  void _failOrRetry(DownloadTask task, DownloaderException error) {
+    if (DownloadRetryPolicy.isRetryable(error) &&
+        task.retryAttempt < retryDelays.length) {
+      final delay = retryDelays[task.retryAttempt];
+      task.waitForRetry(delay);
+      _retryTimers[task.id] = Timer(delay, () {
+        _retryTimers.remove(task.id);
+        if (_closing || task.cancelToken.isCancelled) return;
+        task.resetForRetry();
+        _pump();
+      });
+    } else {
+      task.markFailed(error);
+    }
+  }
+
+  Future<void> shutdown() async {
+    _closing = true;
+    for (final timer in _retryTimers.values) {
+      timer.cancel();
+    }
+    _retryTimers.clear();
+    for (final task in tasks.where((task) => task.state.isActive)) {
+      task.cancelToken.cancel();
+    }
+    await Future.wait(_executions.toList());
+    await flushHistory();
+  }
+
+  @override
+  void dispose() {
+    unawaited(shutdown());
+    super.dispose();
   }
 }

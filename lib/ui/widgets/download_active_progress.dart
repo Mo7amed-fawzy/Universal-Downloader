@@ -14,6 +14,8 @@ class DownloadActiveProgress extends StatelessWidget {
     final theme = Theme.of(context);
     final progress = task.progress;
     final percent = task.displayPercent;
+    final paused = task.state == DownloadTaskState.paused;
+    final stopping = paused || task.state == DownloadTaskState.pausing;
     final processing =
         task.state == DownloadTaskState.merging ||
         task.state == DownloadTaskState.verifying;
@@ -23,14 +25,21 @@ class DownloadActiveProgress extends StatelessWidget {
       if (progress.totalBytes != null)
         'of ${FormatUtils.bytes(progress.totalBytes)}',
       if (percent != null) '${percent.toStringAsFixed(0)}%',
-      if (progress.speedBytesPerSecond != null)
+      if (!stopping && progress.speedBytesPerSecond != null)
         FormatUtils.bytesPerSecond(progress.speedBytesPerSecond),
-      if (progress.eta != null) 'ETA ${FormatUtils.duration(progress.eta)}',
+      if (!stopping && progress.eta != null)
+        'ETA ${FormatUtils.duration(progress.eta)}',
     ].join(' ');
     final details = processing
         ? task.state == DownloadTaskState.merging
               ? 'Merging video and audio...'
               : 'Checking downloaded file...'
+        : paused
+        ? stats.isEmpty
+              ? 'Resume to continue.'
+              : '$stats · Resume to continue.'
+        : stopping
+        ? stats
         : stats.isEmpty
         ? 'Starting...'
         : stats;

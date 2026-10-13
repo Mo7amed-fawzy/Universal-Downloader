@@ -54,6 +54,8 @@ class DownloadTask extends ChangeNotifier {
   CancelToken _cancelToken = CancelToken();
   DateTime? _startedAt;
   DateTime? _completedAt;
+  int retryAttempt = 0;
+  DateTime? retryAt;
 
   DownloadTaskState get state => _state;
   DownloadProgress get progress => _progress;
@@ -123,6 +125,35 @@ class DownloadTask extends ChangeNotifier {
     notifyListeners();
   }
 
+  void markInterrupted() {
+    _state = DownloadTaskState.interrupted;
+    notifyListeners();
+  }
+
+  void markPausing() {
+    _state = DownloadTaskState.pausing;
+    retryAt = null;
+    notifyListeners();
+  }
+
+  void markPaused() {
+    _state = DownloadTaskState.paused;
+    retryAt = null;
+    notifyListeners();
+  }
+
+  void waitForRetry(Duration delay) {
+    retryAttempt++;
+    retryAt = DateTime.now().add(delay);
+    setPhase(DownloadTaskState.waitingForRetry);
+    setProgress(
+      DownloadProgress(
+        statusLabel:
+            'Network interrupted. Retry $retryAttempt in ${delay.inSeconds}s.',
+      ),
+    );
+  }
+
   /// Resets a failed task so it can be retried with a fresh cancel token.
   void resetForRetry() {
     _state = DownloadTaskState.queued;
@@ -131,6 +162,7 @@ class DownloadTask extends ChangeNotifier {
     _error = null;
     _technicalDetails = null;
     _completedAt = null;
+    retryAt = null;
     _cancelToken = CancelToken();
     notifyListeners();
   }

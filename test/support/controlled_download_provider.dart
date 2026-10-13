@@ -9,6 +9,9 @@ import 'package:universal_downloader/providers/downloader_provider.dart';
 
 class ControlledDownloadProvider implements DownloaderProvider {
   final List<Completer<DownloadTaskResult>> calls = [];
+  final List<PhaseCallback> phases = [];
+  final List<ProgressCallback> progress = [];
+  final List<CancelToken> tokens = [];
 
   @override
   String get id => 'test';
@@ -32,6 +35,9 @@ class ControlledDownloadProvider implements DownloaderProvider {
   }) {
     final call = Completer<DownloadTaskResult>();
     calls.add(call);
+    phases.add(onPhase);
+    progress.add(onProgress);
+    tokens.add(cancelToken);
     return call.future;
   }
 }

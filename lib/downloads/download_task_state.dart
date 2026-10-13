@@ -1,6 +1,10 @@
 /// Lifecycle states of a single download task.
 enum DownloadTaskState {
   queued,
+  pausing,
+  paused,
+  interrupted,
+  waitingForRetry,
   fetchingInfo,
   selectingFormat,
   downloadingVideo,
@@ -16,6 +20,8 @@ enum DownloadTaskState {
 
   bool get isActive {
     return this == queued ||
+        this == pausing ||
+        this == waitingForRetry ||
         this == fetchingInfo ||
         this == selectingFormat ||
         this == downloadingVideo ||
@@ -34,6 +40,14 @@ enum DownloadTaskState {
     switch (this) {
       case DownloadTaskState.queued:
         return 'Queued';
+      case DownloadTaskState.pausing:
+        return 'Pausing...';
+      case DownloadTaskState.paused:
+        return 'Paused';
+      case DownloadTaskState.interrupted:
+        return 'Interrupted — ready to resume';
+      case DownloadTaskState.waitingForRetry:
+        return 'Waiting to retry';
       case DownloadTaskState.fetchingInfo:
         return 'Fetching info';
       case DownloadTaskState.selectingFormat:

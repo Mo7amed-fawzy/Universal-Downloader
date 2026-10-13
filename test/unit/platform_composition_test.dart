@@ -254,6 +254,8 @@ void main() {
       'queue completes only after publishing and keeps a content URI',
       () async {
         addTestDownload(controller, extraFactory.provider, root);
+        await controller.manager.flushHistory();
+        await pumpEventQueue();
         extraFactory.provider.calls.single.complete(
           DownloadTaskResult(
             outputFile: File('${root.path}/finished.mp4'),
@@ -272,6 +274,8 @@ void main() {
         );
         platform.publication.complete('content://downloads/42');
         await pumpEventQueue();
+        await controller.manager.flushHistory();
+        await pumpEventQueue();
         final task = controller.manager.tasks.single;
         expect(task.state, DownloadTaskState.completed);
         expect(task.outputPath, 'content://downloads/42');
@@ -286,6 +290,8 @@ void main() {
         'publication failure/cancellation is not reported as success ($cancelled)',
         () async {
           addTestDownload(controller, extraFactory.provider, root);
+          await controller.manager.flushHistory();
+          await pumpEventQueue();
           extraFactory.provider.calls.single.complete(
             DownloadTaskResult(
               outputFile: File('${root.path}/finished.mp4'),
@@ -299,6 +305,8 @@ void main() {
                 ? DownloadCancelledException()
                 : FilesystemException('Cannot publish'),
           );
+          await pumpEventQueue();
+          await controller.manager.flushHistory();
           await pumpEventQueue();
           expect(
             controller.manager.tasks.single.state,

@@ -9,10 +9,8 @@ import '../../downloads/download_task.dart';
 import '../../downloads/download_task_state.dart';
 import '../components/status_chip.dart';
 import 'download_active_progress.dart';
+import 'download_task_actions.dart';
 import 'download_completed_status.dart';
-import 'download_location_button.dart';
-import 'download_remove_button.dart';
-import 'error_dialog.dart';
 
 /// A single entry in the download queue.
 class DownloadTile extends StatefulWidget {
@@ -171,7 +169,7 @@ class _DownloadTileState extends State<DownloadTile>
                 ),
               ),
               const SizedBox(width: 8),
-              _Actions(
+              DownloadTaskActions(
                 task: task,
                 fileMissing: _fileMissing,
                 openDownload: _openDownload,
@@ -195,11 +193,23 @@ class _StateArea extends StatelessWidget {
     final state = task.state;
 
     switch (state) {
+      case DownloadTaskState.interrupted:
+        return Text(
+          'Download interrupted. Resume to continue.',
+          style: Theme.of(context).textTheme.bodyMedium,
+        );
+      case DownloadTaskState.waitingForRetry:
+        return Text(
+          task.progress.statusLabel ?? state.label,
+          style: Theme.of(context).textTheme.bodyMedium,
+        );
       case DownloadTaskState.queued:
       case DownloadTaskState.fetchingInfo:
       case DownloadTaskState.selectingFormat:
       case DownloadTaskState.waitingForSubtitles:
         return _infoRow(context, '${state.label}...');
+      case DownloadTaskState.pausing:
+      case DownloadTaskState.paused:
       case DownloadTaskState.downloadingVideo:
       case DownloadTaskState.downloadingAudio:
       case DownloadTaskState.downloadingCover:
@@ -250,86 +260,6 @@ class _StateArea extends StatelessWidget {
   Widget _infoRow(BuildContext context, String text) {
     final theme = Theme.of(context);
     return Text(text, style: theme.textTheme.bodyMedium);
-  }
-}
-
-class _Actions extends StatelessWidget {
-  const _Actions({
-    required this.task,
-    required this.fileMissing,
-    required this.openDownload,
-  });
-
-  final DownloadTask task;
-  final bool fileMissing;
-  final Future<void> Function(String) openDownload;
-
-  @override
-  Widget build(BuildContext context) {
-    final state = task.state;
-    if (state.isActive) {
-      return IconButton(
-        tooltip: 'Cancel',
-        icon: const Icon(Icons.close),
-        onPressed: () => context.read<AppController>().manager.cancel(task.id),
-      );
-    }
-
-    final buttons = <Widget>[];
-    switch (state) {
-      case DownloadTaskState.completed:
-        if (!fileMissing) {
-          buttons.add(
-            DownloadLocationButton(
-              outputPath: task.outputPath,
-              openDownload: openDownload,
-            ),
-          );
-        }
-        buttons.add(
-          DownloadRemoveButton(
-            onRemove: () =>
-                context.read<AppController>().manager.remove(task.id),
-          ),
-        );
-      case DownloadTaskState.failed:
-        buttons.add(
-          IconButton(
-            tooltip: 'View details',
-            icon: const Icon(Icons.article_outlined),
-            onPressed: () => showErrorDialog(
-              context,
-              message: task.error?.message ?? 'Failed',
-              details: task.technicalDetails,
-            ),
-          ),
-        );
-        buttons.add(
-          IconButton(
-            tooltip: 'Retry',
-            icon: const Icon(Icons.refresh),
-            onPressed: () =>
-                context.read<AppController>().manager.retry(task.id),
-          ),
-        );
-        buttons.add(
-          DownloadRemoveButton(
-            onRemove: () =>
-                context.read<AppController>().manager.remove(task.id),
-          ),
-        );
-      case DownloadTaskState.cancelled:
-        buttons.add(
-          DownloadRemoveButton(
-            onRemove: () =>
-                context.read<AppController>().manager.remove(task.id),
-          ),
-        );
-      default:
-        break;
-    }
-
-    return Row(mainAxisSize: MainAxisSize.min, children: buttons);
   }
 }
 
