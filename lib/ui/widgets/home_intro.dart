@@ -9,18 +9,20 @@ class HomeIntro extends StatelessWidget {
     return Padding(
       padding: const EdgeInsets.fromLTRB(4, 0, 4, 20),
       child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
+        crossAxisAlignment: CrossAxisAlignment.center,
         children: [
           Semantics(
             header: true,
             child: Text(
               'Catch it. Keep it.',
+              textAlign: TextAlign.center,
               style: theme.textTheme.headlineMedium,
             ),
           ),
           const SizedBox(height: 6),
           Text(
             'Your favorite videos, ready to go.',
+            textAlign: TextAlign.center,
             style: theme.textTheme.bodyLarge?.copyWith(
               color: theme.colorScheme.onSurfaceVariant,
             ),

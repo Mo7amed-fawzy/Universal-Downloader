@@ -21,6 +21,7 @@ import '../widgets/download_tile.dart';
 import '../widgets/error_dialog.dart';
 import '../widgets/home_video_list.dart';
 import '../widgets/home_intro.dart';
+import '../widgets/home_content_layout.dart';
 import '../widgets/home_video_settings.dart';
 import '../widgets/home_playlist_card.dart';
 import '../widgets/home_remove_confirmation_dialog.dart';
@@ -769,220 +770,218 @@ class _HomePageState extends State<HomePage> {
             },
             builder: (context, candidates, rejected) {
               final isDragging = candidates.isNotEmpty;
-              return SingleChildScrollView(
-                padding: const EdgeInsets.all(24),
-                child: Center(
-                  child: ConstrainedBox(
-                    constraints: const BoxConstraints(maxWidth: 860),
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.stretch,
-                      children: [
-                        const HomeIntro(),
-                        const DependencyBanner(),
-                        if (isDragging) ...[
-                          const SizedBox(height: 8),
-                          Container(
-                            padding: const EdgeInsets.all(12),
-                            decoration: BoxDecoration(
-                              border: Border.all(
-                                color: Theme.of(context).colorScheme.primary,
-                                width: 2,
-                              ),
-                              borderRadius: BorderRadius.circular(12),
-                            ),
-                            child: Center(
-                              child: Text(
-                                multiDownloadMode
-                                    ? 'Drop URLs to add videos'
-                                    : 'Drop URL to download',
-                              ),
-                            ),
+              return HomeContentLayout(
+                centerVertically:
+                    selected == null &&
+                    activeTasks.isEmpty &&
+                    (!multiDownloadMode ||
+                        (_entries.isEmpty && _playlists.isEmpty)),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.stretch,
+                  children: [
+                    const HomeIntro(),
+                    const DependencyBanner(),
+                    if (isDragging) ...[
+                      const SizedBox(height: 8),
+                      Container(
+                        padding: const EdgeInsets.all(12),
+                        decoration: BoxDecoration(
+                          border: Border.all(
+                            color: Theme.of(context).colorScheme.primary,
+                            width: 2,
                           ),
-                        ],
-                        const SizedBox(height: 12),
-                        ListenableBuilder(
-                          listenable: controller.manager,
-                          builder: (context, child) => UrlInputCard(
-                            controller: _urlController,
-                            focusNode: _urlFocusNode,
-                            fetching: !multiDownloadMode && _singleFetching,
-                            multiDownloadMode: multiDownloadMode,
-                            enabled: !busy,
-                            onFetch: _fetchInfo,
-                            provider: _provider,
-                            errorMessage: _errorMessage,
-                            previousDownloadCount: controller.manager
-                                .completedVideoCount(
-                                  _urlController.text
-                                      .trim()
-                                      .split(RegExp(r'\s+'))
-                                      .map(Uri.tryParse)
-                                      .whereType<Uri>(),
-                                ),
-                            onViewDownloads: _viewPreviousDownload,
-                            onAddPlaylist: _showPlaylistDialog,
+                          borderRadius: BorderRadius.circular(12),
+                        ),
+                        child: Center(
+                          child: Text(
+                            multiDownloadMode
+                                ? 'Drop URLs to add videos'
+                                : 'Drop URL to download',
                           ),
                         ),
-                        if (multiDownloadMode &&
-                            controller.settings.autoStartDownload)
-                          const Padding(
-                            padding: EdgeInsets.all(8),
-                            child: Text(
-                              'Auto-start is on: individual videos download after fetching. Playlists wait for review. '
-                              'Turn it off in Settings to review them first.',
+                      ),
+                    ],
+                    const SizedBox(height: 12),
+                    ListenableBuilder(
+                      listenable: controller.manager,
+                      builder: (context, child) => UrlInputCard(
+                        controller: _urlController,
+                        focusNode: _urlFocusNode,
+                        fetching: !multiDownloadMode && _singleFetching,
+                        multiDownloadMode: multiDownloadMode,
+                        enabled: !busy,
+                        onFetch: _fetchInfo,
+                        provider: _provider,
+                        errorMessage: _errorMessage,
+                        previousDownloadCount: controller.manager
+                            .completedVideoCount(
+                              _urlController.text
+                                  .trim()
+                                  .split(RegExp(r'\s+'))
+                                  .map(Uri.tryParse)
+                                  .whereType<Uri>(),
                             ),
-                          ),
-                        if (selected != null) ...[
-                          const SizedBox(height: 12),
-                          SizedBox(
-                            key: _videoDetailsKey,
-                            child: HomeVideoSettings(
-                              key: ValueKey(selected.id),
-                              draft: selected,
-                              onClearSelection: multiDownloadMode
-                                  ? () => setState(() => _selected = null)
-                                  : null,
-                              preferredLanguage:
-                                  controller.settings.preferredLanguage,
-                              onChanged: () =>
-                                  setState(() => selected.errorMessage = null),
-                              onDownload: busy
-                                  ? null
-                                  : multiDownloadMode
-                                  ? () => _startDownloads([selected])
-                                  : _startSingleDownload,
-                            ),
-                          ),
-                          if (selectedPlaylist != null)
-                            Align(
-                              alignment: Alignment.centerLeft,
-                              child: TextButton.icon(
-                                onPressed:
-                                    busy ||
-                                        _entries.any(
-                                          (entry) =>
-                                              entry.playlist ==
-                                                  selectedPlaylist &&
-                                              (entry.waiting || entry.fetching),
-                                        )
-                                    ? null
-                                    : () => _applyPlaylistSettings(
-                                        selected,
-                                        selectedPlaylist,
-                                      ),
-                                icon: const Icon(Icons.playlist_add_check),
-                                label: const Text(
-                                  'Apply these settings to playlist',
-                                ),
-                              ),
-                            ),
-                        ],
-                        if (multiDownloadMode)
-                          for (final playlist in _playlists) ...[
-                            const SizedBox(height: 20),
-                            HomePlaylistCard(
-                              key: ObjectKey(playlist),
-                              playlist: playlist,
-                              outputDirectory: playlist.outputDirectory.isEmpty
-                                  ? controller.resolveOutputDirectory()
-                                  : playlist.outputDirectory,
-                              onOutputDirectoryChanged: (directory) =>
-                                  _selectPlaylistDirectory(playlist, directory),
-                              entries: _entries
-                                  .where((entry) => entry.playlist == playlist)
-                                  .toList(),
-                              selected: selected,
-                              onSelect: _selectDraft,
-                              onSelectionChanged: () => setState(() {}),
-                              onRetryVideo: _retryEntry,
-                              onRemoveVideo: _removeEntry,
-                              onRetry: () => _fetchPlaylist(playlist),
-                              onRemove: () => _removePlaylist(playlist),
-                              onToggleCollapsed: () => setState(
-                                () => playlist.collapsed = !playlist.collapsed,
-                              ),
-                              onDownload: busy
-                                  ? null
-                                  : () => _startDownloads(
-                                      _entries
-                                          .where(
-                                            (entry) =>
-                                                entry.playlist == playlist &&
-                                                entry.selectedForDownload,
-                                          )
-                                          .map((entry) => entry.draft)
-                                          .whereType<HomeVideoDraft>()
-                                          .toList(),
-                                      navigate: false,
-                                    ),
-                            ),
-                          ],
-                        if (multiDownloadMode &&
-                            _regularEntries.isNotEmpty) ...[
-                          const SizedBox(height: 24),
-                          HomeVideoList(
-                            entries: _regularEntries,
-                            outputDirectory:
-                                _regularOutputDirectory ??
-                                controller.resolveOutputDirectory(),
-                            onOutputDirectoryChanged: _selectRegularDirectory,
-                            onVideoDirectoryChanged: _selectVideoDirectory,
-                            onRetry: _retryEntry,
-                            selected: selected,
-                            collapsed: _collapsed,
-                            onToggleCollapsed: () =>
-                                setState(() => _collapsed = !_collapsed),
-                            onSelect: _selectDraft,
-                            onSelectionChanged: () => setState(() {}),
-                            onRemove: _removeEntry,
-                          ),
-                          const SizedBox(height: 16),
-                          Text(
-                            'Best quality is selected automatically for each new video. '
-                            '${controller.manager.queue.maxConcurrent} downloads run at a time; the rest wait in the queue.',
-                            style: Theme.of(context).textTheme.bodySmall,
-                          ),
-                          const SizedBox(height: 12),
-                          Align(
-                            alignment: Alignment.centerRight,
-                            child: FilledButton.icon(
-                              onPressed: busy || _regularDrafts.isEmpty
-                                  ? null
-                                  : () => _startDownloads(_regularDrafts),
-                              icon: const Icon(Icons.download),
-                              label: Text(
-                                'Download ${_regularEntries.every((entry) => entry.selectedForDownload) ? 'all' : 'selected'} (${_regularDrafts.length})',
-                              ),
-                              style: FilledButton.styleFrom(
-                                minimumSize: const Size(220, 52),
-                              ),
-                            ),
-                          ),
-                        ],
-                        if (activeTasks.isNotEmpty) ...[
-                          const SizedBox(height: 24),
-                          Text(
-                            'Active downloads',
-                            style: Theme.of(context).textTheme.titleMedium,
-                          ),
-                          const SizedBox(height: 8),
-                          for (final task in activeTasks) ...[
-                            DownloadTile(task: task),
-                            const SizedBox(height: 8),
-                          ],
-                        ],
-                        const SizedBox(height: 16),
-                        Text(
-                          Theme.of(context).platform == TargetPlatform.android
-                              ? 'Keep the app open while downloading in this preview.'
+                        onViewDownloads: _viewPreviousDownload,
+                        onAddPlaylist: _showPlaylistDialog,
+                      ),
+                    ),
+                    if (multiDownloadMode &&
+                        controller.settings.autoStartDownload)
+                      const Padding(
+                        padding: EdgeInsets.all(8),
+                        child: Text(
+                          'Auto-start is on: individual videos download after fetching. Playlists wait for review. '
+                          'Turn it off in Settings to review them first.',
+                        ),
+                      ),
+                    if (selected != null) ...[
+                      const SizedBox(height: 12),
+                      SizedBox(
+                        key: _videoDetailsKey,
+                        child: HomeVideoSettings(
+                          key: ValueKey(selected.id),
+                          draft: selected,
+                          onClearSelection: multiDownloadMode
+                              ? () => setState(() => _selected = null)
+                              : null,
+                          preferredLanguage:
+                              controller.settings.preferredLanguage,
+                          onChanged: () =>
+                              setState(() => selected.errorMessage = null),
+                          onDownload: busy
+                              ? null
                               : multiDownloadMode
-                              ? 'Tip: Ctrl+Enter adds links or downloads individual videos. Use Download playlist for each playlist group.'
-                              : 'Tip: press Ctrl+Enter to fetch or download. Drag & drop a URL anywhere on this page.',
-                          style: Theme.of(context).textTheme.bodySmall,
+                              ? () => _startDownloads([selected])
+                              : _startSingleDownload,
+                        ),
+                      ),
+                      if (selectedPlaylist != null)
+                        Align(
+                          alignment: Alignment.centerLeft,
+                          child: TextButton.icon(
+                            onPressed:
+                                busy ||
+                                    _entries.any(
+                                      (entry) =>
+                                          entry.playlist == selectedPlaylist &&
+                                          (entry.waiting || entry.fetching),
+                                    )
+                                ? null
+                                : () => _applyPlaylistSettings(
+                                    selected,
+                                    selectedPlaylist,
+                                  ),
+                            icon: const Icon(Icons.playlist_add_check),
+                            label: const Text(
+                              'Apply these settings to playlist',
+                            ),
+                          ),
+                        ),
+                    ],
+                    if (multiDownloadMode)
+                      for (final playlist in _playlists) ...[
+                        const SizedBox(height: 20),
+                        HomePlaylistCard(
+                          key: ObjectKey(playlist),
+                          playlist: playlist,
+                          outputDirectory: playlist.outputDirectory.isEmpty
+                              ? controller.resolveOutputDirectory()
+                              : playlist.outputDirectory,
+                          onOutputDirectoryChanged: (directory) =>
+                              _selectPlaylistDirectory(playlist, directory),
+                          entries: _entries
+                              .where((entry) => entry.playlist == playlist)
+                              .toList(),
+                          selected: selected,
+                          onSelect: _selectDraft,
+                          onSelectionChanged: () => setState(() {}),
+                          onRetryVideo: _retryEntry,
+                          onRemoveVideo: _removeEntry,
+                          onRetry: () => _fetchPlaylist(playlist),
+                          onRemove: () => _removePlaylist(playlist),
+                          onToggleCollapsed: () => setState(
+                            () => playlist.collapsed = !playlist.collapsed,
+                          ),
+                          onDownload: busy
+                              ? null
+                              : () => _startDownloads(
+                                  _entries
+                                      .where(
+                                        (entry) =>
+                                            entry.playlist == playlist &&
+                                            entry.selectedForDownload,
+                                      )
+                                      .map((entry) => entry.draft)
+                                      .whereType<HomeVideoDraft>()
+                                      .toList(),
+                                  navigate: false,
+                                ),
                         ),
                       ],
+                    if (multiDownloadMode && _regularEntries.isNotEmpty) ...[
+                      const SizedBox(height: 24),
+                      HomeVideoList(
+                        entries: _regularEntries,
+                        outputDirectory:
+                            _regularOutputDirectory ??
+                            controller.resolveOutputDirectory(),
+                        onOutputDirectoryChanged: _selectRegularDirectory,
+                        onVideoDirectoryChanged: _selectVideoDirectory,
+                        onRetry: _retryEntry,
+                        selected: selected,
+                        collapsed: _collapsed,
+                        onToggleCollapsed: () =>
+                            setState(() => _collapsed = !_collapsed),
+                        onSelect: _selectDraft,
+                        onSelectionChanged: () => setState(() {}),
+                        onRemove: _removeEntry,
+                      ),
+                      const SizedBox(height: 16),
+                      Text(
+                        'Best quality is selected automatically for each new video. '
+                        '${controller.manager.queue.maxConcurrent} downloads run at a time; the rest wait in the queue.',
+                        style: Theme.of(context).textTheme.bodySmall,
+                      ),
+                      const SizedBox(height: 12),
+                      Align(
+                        alignment: Alignment.centerRight,
+                        child: FilledButton.icon(
+                          onPressed: busy || _regularDrafts.isEmpty
+                              ? null
+                              : () => _startDownloads(_regularDrafts),
+                          icon: const Icon(Icons.download),
+                          label: Text(
+                            'Download ${_regularEntries.every((entry) => entry.selectedForDownload) ? 'all' : 'selected'} (${_regularDrafts.length})',
+                          ),
+                          style: FilledButton.styleFrom(
+                            minimumSize: const Size(220, 52),
+                          ),
+                        ),
+                      ),
+                    ],
+                    if (activeTasks.isNotEmpty) ...[
+                      const SizedBox(height: 24),
+                      Text(
+                        'Active downloads',
+                        style: Theme.of(context).textTheme.titleMedium,
+                      ),
+                      const SizedBox(height: 8),
+                      for (final task in activeTasks) ...[
+                        DownloadTile(task: task),
+                        const SizedBox(height: 8),
+                      ],
+                    ],
+                    const SizedBox(height: 16),
+                    Text(
+                      Theme.of(context).platform == TargetPlatform.android
+                          ? 'Keep the app open while downloading in this preview.'
+                          : multiDownloadMode
+                          ? 'Tip: Ctrl+Enter adds links or downloads individual videos. Use Download playlist for each playlist group.'
+                          : 'Tip: press Ctrl+Enter to fetch or download. Drag & drop a URL anywhere on this page.',
+                      textAlign: TextAlign.center,
+                      style: Theme.of(context).textTheme.bodySmall,
                     ),
-                  ),
+                  ],
                 ),
               );
             },
