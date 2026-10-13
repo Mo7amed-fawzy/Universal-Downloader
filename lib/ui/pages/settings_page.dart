@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/foundation.dart';
 import 'package:file_selector/file_selector.dart';
 import 'package:provider/provider.dart';
 
@@ -66,17 +67,17 @@ class _SettingsPageState extends State<SettingsPage> {
   }
 
   Future<void> _saveTextFields() async {
-    await _save(
-      _draft.copyWith(
-        defaultDownloadDirectory: _dirController.text.trim(),
-        preferredLanguage: _preferredLangController.text.trim(),
-        fallbackLanguage: _fallbackLangController.text.trim(),
-        ytDlpPath: _ytDlpPathController.text.trim(),
-        ffmpegPath: _ffmpegPathController.text.trim(),
-        ffprobePath: _ffprobePathController.text.trim(),
-        extraYtDlpArgs: _extraArgsController.text.trim(),
-      ),
+    final next = _draft.copyWith(
+      defaultDownloadDirectory: _dirController.text.trim(),
+      preferredLanguage: _preferredLangController.text.trim(),
+      fallbackLanguage: _fallbackLangController.text.trim(),
+      ytDlpPath: _ytDlpPathController.text.trim(),
+      ffmpegPath: _ffmpegPathController.text.trim(),
+      ffprobePath: _ffprobePathController.text.trim(),
+      extraYtDlpArgs: _extraArgsController.text.trim(),
     );
+    if (mapEquals(_draft.toJson(), next.toJson())) return;
+    await _save(next);
   }
 
   Future<void> _restoreIncludedTools() async {
@@ -365,7 +366,10 @@ class _TextFieldState extends State<_TextField> {
         hintText: widget.hint,
       ),
       onSubmitted: (_) => widget.onSaved(),
-      onTapOutside: (_) => widget.onSaved(),
+      onTapOutside: (_) {
+        FocusManager.instance.primaryFocus?.unfocus();
+        widget.onSaved();
+      },
       textInputAction: TextInputAction.done,
     );
   }
