@@ -1,44 +1,290 @@
 # Universal Downloader: Project State
 
-Last updated: 2026-10-12 (Africa/Cairo).
+Last updated: 2026-10-13 (Africa/Cairo).
 
-## Current Checkpoint: Reveal and Highlight Previous Download
+## Git Preparation and Verification
 
-Clicking Already downloaded now routes to the exact matching completed task in
-Downloads. When multiple records match a video, the most recent completion is
-selected; multi-link input targets the first matched input video. A typed route
-argument carries the task ID. The warning remains a compact amber line below
-Provider and does not block downloading.
+Changes are grouped into separate Conventional Commits for persistent download
+recovery and pause/resume, playlist and batch selection, settings focus and save
+handling, CatchIt Swift branding, and these documentation checkpoints. Approved
+branding assets are included; design explorations in `output/` remain local.
 
-Downloads keeps its header visible and opens its lazily built, variable-height
-history at the selected row using a centered sliver list. Original record order
-and access to records above/below are preserved without rendering the whole
-history or estimating row heights. A history scroll controller bounds the offset
-using the trailing sliver's measured extent: revealing a final row does not leave
-extra empty space below it, and short histories retain their normal placement.
-The bounds also update when the marker disappears. After the route transition
-finishes, an arrow and Downloaded before label appear above the card with a brief amber border/glow
-pulse. The label and border disappear three seconds after arrival, restoring the
-normal card without resetting the scroll position. Reduced motion shows a static
-marker for the same duration. Ordinary Downloads navigation has no marker.
-Removing the target clears the marker; timers, route/list listeners and
-controllers are disposed.
+Pre-push validation on 2026-10-13: 87 targeted unit/integration tests passed,
+including real yt-dlp localhost resumption after interruption, pause/resume and
+shutdown. Earlier branding validation also passed analysis, 67 widget tests and
+the Linux debug build. Remote YouTube tests were not run for this preparation.
 
-Verified on 2026-10-12 after the spacing fix: reproduced extra trailing space
-with failing tests for 2-row and 30-row histories (212px and 492px differences).
-All 39 Home/Downloads widget tests now pass, including normal placement after
-revealing the final row and after marker expiry. The arrival tests still verify
-the 3-second duration, reduced motion, and lazy access to row 800 of 1000.
-Earlier history matching tests passed before these visual changes.
-Analysis and whitespace checks passed.
-Hot reload succeeded; no runtime errors were reported. No live download or
-release build was started. Next: use normally; no outstanding work for this request.
+## Current Branding: CatchIt Swift
 
-Git checkpoint: the progress fix, optional multi-download mode, and previous
-download warning/navigation are saved as separate local commits, with related
-tests alongside each change. The historical HTML concept in `output/` remains
-untracked. No push was performed; this commit-only pass reused the validation
-above and checked staged diffs and whitespace without rerunning tests.
+The user selected `output/catchit-v3-swift.png`, superseding Orbit. Its exact
+1254×1254 RGBA logo is copied to `assets/branding/catchit-logo.png`. The
+standalone bird icon was extracted with imagegen and exported at 512×512 to
+`assets/branding/catchit-icon.png`; prompt: `output/catchit-swift-icon-prompt.txt`.
+The shared app bar displays the bird beside CatchIt. MaterialApp and the Linux
+native window use CatchIt. Linux loads the bundled icon and packages a desktop
+entry and hicolor icon. Package IDs, executable and storage paths stay unchanged.
+Other platforms' native launcher resources have not been changed.
+
+Verified: Flutter analysis, 67 existing Home/playlist/Downloads widget tests,
+Linux debug build, and diff whitespace checks passed. The bundled and installed
+512×512 icons match the Swift asset. Hot reload succeeded; live screenshot
+confirmed the Swift bird and CatchIt header, with no runtime errors. The current
+process still has its old native title; the new title/window icon take effect
+when the rebuilt application is reopened. No running download was interrupted.
+
+## Current Checkpoint: Multi-download Removal Confirmation
+
+Every remove × in Your videos and playlist groups now asks for confirmation:
+ordinary videos (ready/loading/failed), individual playlist videos, and whole
+playlists. The dialog names the target and explains that its draft settings will
+be lost; playlist removal covers all remaining group videos. Cancel is focused
+by default. Cancel, Escape and dismissal leave drafts and selections unchanged.
+Loading playlists are cancelled only after confirmation. Removal rechecks that
+Home and the target still exist after the dialog, including metadata completion
+while it is open. Existing queued downloads/files are unaffected.
+
+Verified on 2026-10-13: all 58 Home/playlist/paint tests passed, including
+cancel/Escape/barrier dismissal at 375px with enlarged text in both themes,
+individual/group confirmation, keeping a loading playlist, confirmed loading
+removal and metadata completion during confirmation. Flutter analysis and diff
+whitespace checks passed. Hot reload succeeded and no runtime errors were found.
+No build or remote download was performed. Next: normal use.
+
+## Previous Checkpoint: Batch and Individual Video Folders
+
+Your videos now includes Folder for all videos using the existing native directory
+picker. Choosing it updates all ordinary drafts, including unchecked ones; pending,
+retried and newly added videos inherit it while Home remains mounted. Playlist
+groups keep their independent folders. Each ordinary desktop video card also has
+a Save folder button beneath its settings, showing the current path with a full
+path tooltip. It changes only that video, synchronizes the existing editor, and
+does not open settings. Choosing a batch folder again replaces individual paths.
+Already queued tasks retain their destinations.
+
+Verified on 2026-10-13: all 53 Home/playlist/paint tests passed, including native
+picker channel mocks for batch selection, individual override and cancellation,
+pending/retry/new-video inheritance, playlist isolation and queued destinations.
+Existing quality/audio/subtitle and light/dark/narrow/landscape/enlarged-text Home
+regressions passed. Flutter analysis and git diff whitespace checks passed.
+Hot reload succeeded in the running Linux app; no runtime errors were reported.
+No real native-picker interaction, build or remote download was performed.
+Next: normal use; no outstanding implementation work for this request.
+
+## Previous Checkpoint: Pause, Resume and Cancellation Confirmation
+
+Downloads now expose Pause beside × for active/queued/retrying tasks. Pausing
+stops the current operation, preserves partial artifacts, selections and recovery
+records, and frees the queue slot after the operation exits. Paused rows retain
+progress without stale speed/ETA and expose Resume. Retry timers are stopped;
+resume uses a fresh cancellation token and cannot launch overlapping executions.
+Late callbacks/errors from a stopped attempt cannot overwrite its pause/cancel
+state. Paused tasks restore as Interrupted after reopening, awaiting manual Resume.
+
+The × action for active, paused and interrupted tasks now asks Cancel download?
+with Keep download focused by default. Dismissal/Escape keeps the task untouched.
+Confirmed cancellation discards temporary progress and removes recovery; a task
+that completes while the dialog is open remains completed with its output intact.
+
+Verified on 2026-10-13: 244 local unit/widget/integration tests passed, including
+pause/queue/retry/cancel races, database reopening, persisted Arabic audio and
+subtitle choices, direct HTTP dropped connections and safe Range fallbacks.
+Three real yt-dlp localhost tests verified nonzero Range resumption and identical
+SHA-256 output after provider interruption, manager Pause/Resume, and manager
+shutdown/database reopening with a fresh provider. UI tests covered light/dark,
+375px, desktop, landscape, reduced motion, and enlarged text. Flutter analysis
+and whitespace checks passed. Hot reload succeeded; runtime errors were checked.
+No remote YouTube download, full build, or physical power-loss test was performed.
+
+Source limitations remain: resumption depends on available artifacts and source
+support; changed/unsupported streams can restart safely. Existing verified-output
+receipt crash-window limitations still apply. Next: normal use; no outstanding
+implementation work for this request.
+
+## Previous Checkpoint: Playlist Scroll Painting and Output Folder
+
+Each playlist row now owns a clipped transparent Material. Previously ListTile
+painted its selection background on the outer playlist Card, allowing the color
+to escape the scrolling viewport while its text and thumbnail were clipped.
+A pixel-level regression reproduced that escaped color before the fix and passes
+afterward.
+
+Playlist folder now appears at the bottom of each group using the existing native
+directory picker. It starts with the resolved app directory; changing it copies
+the location to all ready group videos, including unchecked ones, and pending or
+retried videos inherit it when metadata completes. Ordinary drafts are unaffected.
+Individual video locations can still be edited afterward. Apply settings to
+playlist also synchronizes the displayed group folder. Group folder state remains
+in memory with other playlist drafts; already queued tasks are unchanged.
+
+Verified on 2026-10-13: all 50 Home/playlist/paint tests passed, covering selection,
+quality/audio settings, narrow/desktop light/dark layouts, destination propagation
+and queued output paths. After adjusting field initialization for existing live
+groups, the three focused paint/folder regressions passed again. Flutter analysis
+and diff whitespace checks passed. Hot reload succeeded; live inspection found
+Playlist folder and no runtime errors. No real folder-picker interaction, build,
+or remote download was performed. Next: normal use.
+
+## Previous Checkpoint: Settings Field Focus
+
+Settings text fields, including Fallback language, now explicitly release focus
+when clicked outside while retaining the existing save-on-outside-click behavior.
+Previously the custom save callback replaced Flutter's default unfocus action.
+Unchanged text values now skip saving, global controller notifications and tool
+checks on blur, keeping that unnecessary work out of the label transition.
+Flutter's native floating-label animation remains in use in both directions;
+the label returns inside an empty unfocused field and stays above entered text.
+
+Verified on 2026-10-13: Flutter analysis, the existing Settings switching widget
+test, and whitespace checks passed. Hot reload succeeded with no runtime errors.
+A short recording of the running app showed intermediate label positions while
+the empty Fallback language field lost focus; its value was not changed.
+No build or download was performed. Next: normal use.
+
+## Previous Checkpoint: Playlist Thumbnails and Selection Placement
+
+Playlist rows now show each video's metadata thumbnail at the left in an 80×45
+frame, with a movie icon when absent or failed. The download checkbox sits next
+to the remove × on the right. Ordinary batch cards also place their checkbox
+beside remove. Default selection and queue filtering remain unchanged.
+
+Verified on 2026-10-13: all 47 Home/playlist/selection/responsive tests passed;
+Flutter analysis and diff whitespace checks passed. Hot reload succeeded and
+runtime inspection reported no errors. No build or live download was performed.
+Next: normal use.
+
+## Previous Checkpoint: Multi-download Selection
+
+Ordinary batch cards and playlist rows now have download checkboxes, checked by
+default for every new entry. Each group has Select all with a mixed state and a
+selected count. Batch actions and Ctrl+Enter queue only checked ready ordinary
+videos; Download playlist queues only checked ready videos in its own group.
+No selection disables the corresponding batch button. Unchecked drafts remain
+available with their settings after selected videos are queued.
+
+Download inclusion is independent of the open settings editor. Selection survives
+metadata completion/retry, collapse, and mode changes while Home is mounted.
+Unchecking a pending ordinary video also prevents its automatic download when
+metadata finishes. Explicit Download in the individual editor remains available.
+
+Verified on 2026-10-13: 47 Home/playlist tests passed, including four new selection
+regressions and existing light/dark, narrow/desktop, landscape, large-text layouts.
+33 local format/audio/subtitle/queue tests passed. Flutter analysis and diff
+whitespace checks passed. Hot reload succeeded; live inspection found all six
+playlist entries checked and no runtime errors. The existing removal test now
+waits for scrolling to settle before tapping. No build or remote download was
+performed. Next: normal use; no outstanding implementation work for this request.
+
+## Previous Checkpoint: Clear Selected Video
+
+The selected video's metadata card now shows a red close icon with a neutral
+Clear selection label in multi-download mode only. Its tooltip explains that
+the video and its settings stay in the list. Clicking clears only Home's selected
+draft reference, hiding the editor without removing drafts or changing downloads.
+It applies to ordinary and playlist selections. The action sits at the right of
+the card on desktop and above its content at narrow widths.
+
+Verified on 2026-10-13: 47 existing Home/playlist/responsive tests passed;
+flutter analyze --no-pub and git diff --check passed. Hot reload succeeded;
+the runtime widget inspector found Clear selection beside the user's selected
+Linux video and reported no runtime errors. No new build or live download was
+started for this small UI change. Next: normal use.
+
+## Previous Checkpoint: YouTube Playlist Groups
+
+Multi-download Home now has an Add playlist dialog. Pasted YouTube playlist
+links, including watch links with list=, also become separate playlist groups.
+Single mode hides the action and rejects playlist links before extraction.
+Playlist discovery uses yt-dlp flat JSON, then the existing sequential per-video
+metadata/cache pipeline. URLs are normalized, repeated playlists and repeated
+videos within a group are deduplicated, and playlist videos stay independent
+from ordinary drafts. Groups show their title, ready/error counts, progress,
+retry/remove/collapse controls, and a bounded, lazily built video list.
+
+Each video opens the existing quality/audio/subtitle/output editor. Apply these
+settings to playlist copies choices to ready videos in that group, matching each
+video's own subtitle track and reporting missing subtitles. Download playlist
+queues all ready videos as separate files through the existing download/recovery
+pipeline; metadata failures remain for retry. Playlist download waits for metadata
+preparation to finish. Ordinary Download all remains separate. Playlists always
+wait for review even with auto-start enabled. Removing a loading group cancels
+discovery and ignores late results; disabling multi mode hides its drafts and
+prevents new group downloads. Existing queued tasks continue as before.
+
+Verified on 2026-10-13:
+- 49 Home/playlist tests passed (17 new), covering grouping, duplicate links,
+  full 250-entry parsing, cancellation, retry, settings propagation, single-mode
+  rejection, mode changes, and 375/1162px light/dark layouts at 1.3x text.
+- 94 existing quality/audio/format/subtitle/queue and local cover/subtitle
+  integration tests passed. No remote video download was performed.
+- Flutter analysis, Linux debug build and git diff whitespace checks passed.
+- Real yt-dlp discovery returned all four entries of the public JODA15 playlist;
+  the production parser read its title and four video URLs successfully.
+- Reviewed generated light/dark widget screenshots. Hot reload succeeded in the
+  running Linux app; runtime inspection reported no errors and found Add playlist.
+  Live UI interaction was unavailable because the driver extension is not enabled.
+
+Playlist drafts/group headings remain in memory like ordinary Home drafts;
+queued videos retain existing durable recovery. Private/deleted/inaccessible
+videos cannot be guaranteed downloadable and are surfaced as unavailable/errors.
+Next: normal use with the user's playlist; a full remote playlist download has
+not been validated. No release or commit was created.
+
+## Previous Checkpoint: Download Recovery and Network Retries
+
+New queued tasks are durably saved before starting, using the existing Drift
+SQLite database (schema v2, additive pending_downloads migration). Startup restores
+unfinished/failed tasks as Interrupted with a Resume action; it does not silently
+start network transfers. Full metadata and quality/audio/language/subtitle/output
+choices survive restart. Storage failure prevents an unprotected task starting.
+Completed history and removal of its recovery record are committed together.
+
+Transient network errors retry after 5, 15, 30, 60 and 120 seconds, then expose
+manual Retry while keeping artifacts. Waiting retries release concurrency slots.
+Permanent errors require manual retry. Queued/waiting cancellation stops the task
+without launching it; explicit cancellation/removal discards its temporary files.
+Shutdown preserves unfinished artifacts and stops retry timers/processes.
+
+YouTube explicitly uses continuation and partial files, bounded internal retries,
+and aborts on unavailable fragments. Stream paths identify URL/format/extractor
+configuration, so remapped formats cannot append incompatible bytes. Completed
+video/audio/cover/subtitle artifacts are reused; interrupted merges run again with
+stream copy. Verified result receipts avoid repeating a finished publication on
+retry/restart. Artifacts are cleaned only after the manager saves completion.
+Combined/direct media publish through destination-side staging while retaining
+source files until completion is recorded.
+
+Direct HTTP uses Range + If-Range with an ETag or Last-Modified validator, checks
+206 ranges and lengths, and safely restarts for ignored ranges/416 or absent
+validators. Inconsistent partial responses fail without concatenating bytes.
+Stalls time out; cancellation interrupts pending HTTP requests. Completed files
+can be reused without a network request. Resumption depends on source support;
+missing/changed files may require restarting a stream. Explicit Pause/Resume is now available (see the current checkpoint); desktop
+background/tray support is still separate.
+
+Verified on 2026-10-12:
+- 204 local unit/Downloads/progress tests passed, including database reopening,
+  migration/history retention, queue cancellation, bounded retries, storage failure,
+  actual dropped HTTP connections, and Resume at 375px/light/dark/1.3x text.
+- After final cancellation guards, 92 targeted recovery/HTTP/YouTube/Home/widget/
+  local cover/subtitle tests passed, including reuse after merge failure with
+  Arabic audio, cover and subtitles. Some overlap with the 204-test run.
+- Real yt-dlp localhost interruption/resumption test passed: a fresh provider
+  continued a retained .part using a nonzero HTTP Range; SHA-256 of the finished
+  media matched the generated source. Repeating it reused the verified receipt.
+- flutter analyze --no-pub, git diff --check and flutter build linux --debug
+  --no-pub passed. No remote YouTube download or release build was performed.
+- The running app showed 0 active before hot restart. Restart succeeded, the Home
+  screen loaded, and runtime tooling reported no errors. The live database is
+  schema v2 and retains the existing completed history. No physical machine
+  shutdown/power-loss test was performed.
+
+Recovery applies to tasks queued by this version; the previous version did not
+save in-flight tasks. A tiny crash window before a verified-result receipt is
+written can leave a published output without its receipt, so a subsequent attempt
+may produce a uniquely named duplicate. Android MediaStore crash recovery and
+multiple simultaneous app instances were not validated. Next: normal use and
+observe an interrupted remote download; no outstanding implementation step for
+this request.
 
 ## Previous Checkpoint: Previously Downloaded Video Warning
 
@@ -169,8 +415,8 @@ subtitle/queue/local merge tests remain historical; they were not rerun for this
 fetch-location correction. No live network download or release build was run.
 
 Drafts remain in memory while Home stays mounted; they are not restored after
-app exit. Queue restart recovery and desktop background/tray handling remain
-unimplemented. Next: review the restored editor and bottom video strip in the
+app exit. Queue restart recovery was unimplemented at this checkpoint (now implemented
+above); desktop background/tray handling remains unimplemented. Next: review the restored editor and bottom video strip in the
 Linux app and exercise a real batch download. The earlier illustrative concept
 at `output/batch-download-concept.html` is historical; this task changed the app,
 not that prototype. No macOS platform implementation was added.
@@ -786,8 +1032,9 @@ download success from metadata extraction or local media generation.
 Data root: `$XDG_DATA_HOME/universal_downloader`, default
 `~/.local/share/universal_downloader`. Logs are under `logs/`, task artifacts
 under `temp/download_task_<id>/`, updates under `tools/`. Preferences use
-shared_preferences key `settings_v1`. `library.sqlite` holds completed-download
-history and the five-minute link cache. Active queue state/theme are not persisted.
+shared_preferences key `settings_v1`. `library.sqlite` holds completed-download history, pending download recovery
+records, and the five-minute link cache. Unfinished tasks restore as Interrupted;
+theme and unsent Home drafts are not persisted.
 Linux output defaults to Videos when present, otherwise Downloads, unless overridden.
 Android app data is under files/universal_downloader; completed public downloads
 are under Downloads/UniversalDownloader in a unique folder per task.
