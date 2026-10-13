@@ -38,6 +38,7 @@ class AppController extends ChangeNotifier {
     required this.platform,
     required this.database,
     required this.mediaInfoCache,
+    required this._themeMode,
   });
 
   final LogService log;
@@ -58,11 +59,16 @@ class AppController extends ChangeNotifier {
   List<DependencyStatus> dependencies = const [];
   bool checkingDependencies = false;
 
-  ThemeMode _themeMode = ThemeMode.system;
+  ThemeMode _themeMode;
   ThemeMode get themeMode => _themeMode;
-  void setThemeMode(ThemeMode mode) {
+  Future<void> setThemeMode(ThemeMode mode) async {
     _themeMode = mode;
     notifyListeners();
+    try {
+      await settingsService.saveThemeMode(mode);
+    } catch (error) {
+      log.error('Could not save theme preference: $error');
+    }
   }
 
   /// Builds the full application dependency graph.
@@ -75,6 +81,7 @@ class AppController extends ChangeNotifier {
         platform ?? await const DownloadPlatformFactory().create();
     final settingsService = SettingsService();
     final settings = await settingsService.load();
+    final themeMode = await settingsService.loadThemeMode();
     final log = LogService(
       paths: selectedPlatform.paths,
       debugEnabled: settings.debugLogging,
@@ -108,6 +115,7 @@ class AppController extends ChangeNotifier {
       platform: selectedPlatform,
       database: localDatabase,
       mediaInfoCache: MediaInfoCache(database: localDatabase, log: log),
+      themeMode: themeMode,
     );
     try {
       await manager.restoreHistory();

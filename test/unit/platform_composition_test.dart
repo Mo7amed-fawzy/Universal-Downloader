@@ -2,6 +2,7 @@ import 'dart:async';
 import 'dart:convert';
 import 'dart:io';
 
+import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:universal_downloader/app/app_controller.dart';
@@ -26,11 +27,23 @@ import 'package:universal_downloader/providers/provider_factory.dart';
 import 'package:universal_downloader/providers/provider_registry.dart';
 import 'package:universal_downloader/providers/tool_configurable_provider.dart';
 import 'package:universal_downloader/settings/app_settings.dart';
+import 'package:universal_downloader/settings/settings_service.dart';
 
 import '../support/controlled_download_provider.dart';
 
 void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
+
+  test('missing or invalid theme preference follows the system', () async {
+    for (final values in <Map<String, Object>>[
+      {},
+      {'theme_mode': 'unknown'},
+      {'theme_mode': 42},
+    ]) {
+      SharedPreferences.setMockInitialValues(values);
+      expect(await SettingsService().loadThemeMode(), ThemeMode.system);
+    }
+  });
 
   test(
     'detects Android separately from Linux and rejects unimplemented OS',
@@ -133,6 +146,46 @@ void main() {
       controller.manager.dispose();
       controller.dispose();
       root.deleteSync(recursive: true);
+    });
+
+    for (final mode in ThemeMode.values) {
+      test('restores $mode after recreating the app controller', () async {
+        var notifications = 0;
+        controller.addListener(() => notifications++);
+        final checksBefore = platform.checkCount;
+        final save = controller.setThemeMode(mode);
+        expect(controller.themeMode, mode);
+        expect(notifications, 1);
+        await save;
+        expect(platform.checkCount, checksBefore);
+        await controller.updateSettings(
+          controller.settings.copyWith(preferredLanguage: 'fr'),
+        );
+        final prefs = await SharedPreferences.getInstance();
+        final stored = {
+          for (final key in prefs.getKeys()) key: prefs.get(key)!,
+        };
+        await controller.closeStorage();
+        controller.manager.dispose();
+        controller.dispose();
+        SharedPreferences.setMockInitialValues(stored);
+        controller = await AppController.create(
+          platform: platform,
+          providerFactories: [...defaultProviderFactories, extraFactory],
+        );
+        expect(controller.themeMode, mode);
+        expect(controller.settings.preferredLanguage, 'fr');
+      });
+    }
+
+    test('rapid theme changes persist the latest selection', () async {
+      await Future.wait([
+        controller.setThemeMode(ThemeMode.dark),
+        controller.setThemeMode(ThemeMode.light),
+        controller.setThemeMode(ThemeMode.dark),
+      ]);
+      expect(controller.themeMode, ThemeMode.dark);
+      expect(await SettingsService().loadThemeMode(), ThemeMode.dark);
     });
 
     test('adding a provider injects the selected platform dependencies', () {
