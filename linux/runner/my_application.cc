@@ -61,7 +61,11 @@ static void my_application_activate(GApplication* application) {
         bundle_directory, "data", "flutter_assets", "assets", "branding",
         "catchit-icon.png", nullptr);
     g_autoptr(GError) icon_error = nullptr;
-    if (!gtk_window_set_icon_from_file(window, icon_path, &icon_error)) {
+    g_autoptr(GdkPixbuf) icon = gdk_pixbuf_new_from_file_at_scale(
+        icon_path, 256, 256, TRUE, &icon_error);
+    if (icon != nullptr) {
+      gtk_window_set_icon(window, icon);
+    } else {
       g_warning("Could not load app icon: %s", icon_error->message);
     }
   }
