@@ -2,7 +2,155 @@
 
 Last updated: 2026-10-13 (Africa/Cairo).
 
-## Current Checkpoint: CatchIt Visual Theme
+Commit review on 2026-10-13 grouped theme persistence, bottom-navigation motion,
+Home alignment, the Linux icon fix and startup animation into separate commits.
+Application sources were unchanged during the review; the checks recorded below
+were not rerun for this commit-only request. Local `output/` experiments and the
+machine-specific desktop launcher remain outside version control.
+
+## Current Checkpoint: Home Section Vertical Alignment
+
+Empty Home now places the headline, URL/playlist card and hint together near
+the visual center of the page. HomeContentLayout measures the available height,
+keeps the existing 860 px width cap and 24 px padding, and scrolls when space is
+short. After user review of exact body-centering, alignment was adjusted to
+`Alignment(0, -0.18)`, raising the group about 35 px at the current desktop size
+to balance the app bar. Homes with prepared videos, playlists or active tasks
+retain their top-aligned scrolling layout.
+
+Verified on 2026-10-13: all 61 Home and tab tests passed for the initial centering,
+including narrow/landscape/light/dark/enlarged-text layouts. After the final
+alignment adjustment, Flutter analysis, diff whitespace checks and runtime error
+inspection passed; a screenshot of the running app confirmed the higher position.
+The original tooling hot reload failed; reconnecting with `flutter attach`
+restored hot reload without restarting the app. A CLI attach remains available
+for the existing VM service at port 43931. No build or remote download was run
+for this layout change. Next: user review of the adjusted position.
+
+## Previous Checkpoint: CatchIt Launch Animation
+
+AppStartup prepares the existing controller while a 3.4-second branded intro
+plays once. The original bird flies from center-left to the right, flaps its
+separately clipped wing, turns, and returns with the CatchIt wordmark trailing
+into view. It turns back and settles as the centered logo before a 350 ms fade
+to the application. The wordmark is shared with AppBrand; original PNGs are
+unchanged. Saved theme selection applies to startup, and reduced-motion mode
+shows the settled logo immediately. Slow preparation retains the logo with a
+status message; failures retain an error and Retry action.
+
+Verified on 2026-10-13: 15 startup/navigation widget tests plus one temporary
+61-frame rendering check passed. Tests cover both themes, 375 px, landscape,
+desktop, enlarged text, reduced motion, startup timing in both orders, and Retry.
+Rendered flight/return/final frames were visually inspected. Flutter analysis,
+format checks, Linux debug build and diff whitespace checks passed. Hot reload
+was rejected by the running VM; no runtime errors were reported. No restart or
+live download was performed. Next: reopen the rebuilt app to review the intro.
+
+## Previous Checkpoint: Linux Taskbar Bird Icon
+
+The native runner loads the existing text-free, transparent CatchIt bird at
+256×256 before setting the GTK window icon. Passing the original 512×512 PNG
+made GTK/X11 silently omit `_NET_WM_ICON`: its pixel count plus metadata exceeds
+GTK's icon-property cap. The original branding assets remain unchanged.
+
+Installed `app.universal.downloader.desktop` under the user's
+`~/.local/share/applications`, with a quoted absolute Exec path to this checkout's
+debug bundle, and the identical bird PNG under
+`~/.local/share/icons/hicolor/512x512/apps`. Desktop/icon caches were refreshed.
+The local launcher points to this checkout; reinstall/update its Exec path if
+the bundle moves. The prepared entry is in `output/linux-desktop/`.
+
+Verified on 2026-10-13: a GTK probe reproduced missing icon metadata at 512 px
+and valid metadata at 256 px. Applied the 256 px icon directly to the existing
+CatchIt X11 window without restarting it; `_NET_WM_ICON` reports 256×256 and a
+desktop screenshot confirms the text-free bird in the taskbar. Linux debug
+build, desktop-entry validation and diff whitespace checks passed; installed
+icon SHA-256 matches the source. Desktop validation only noted the existing
+multiple-menu-category hint. The initial foreign-window GTK helper crashed;
+the successful direct X11 update did not close or restart CatchIt. No remote
+download, release build or fresh app launch was performed. The rebuilt native
+runner applies the permanent fix on the next normal launch. Next: normal use.
+
+## Previous Checkpoint: Centered Home Intro
+
+Home's headline, subtitle and bottom hint are centered within the content
+section, including wrapped text. Input controls and download behavior are unchanged.
+Verified on 2026-10-13: Flutter analysis and diff whitespace checks passed;
+hot reload succeeded and runtime inspection reported no errors. No new tests
+or build were run for this alignment-only change.
+
+## Previous Checkpoint: Persistent Theme Selection
+
+Theme changes apply immediately and save locally through SettingsService under
+the shared_preferences key `theme_mode`. AppController restores the choice
+before the main application renders. Missing or invalid values follow the system;
+other settings saves cannot overwrite the theme. Storage write failures are logged.
+
+Verified on 2026-10-13: all 20 platform-composition and tab tests passed, including
+controller recreation for all theme modes, rapid switching, invalid preferences
+and independence from other settings. Flutter analysis passed after the final
+constructor lint correction. Hot reload succeeded. No full build or manual
+process-relaunch check was performed. Select a theme once in the running app to
+persist it; previous in-memory selections were never stored.
+
+## Previous Checkpoint: Smoother Bottom Navigation Motion
+
+Following user review, the bottom-navigation indicator now contracts more
+gently over 320 ms using easeInOutSine. Expansion restores the original 220 ms
+easeInOutCubic motion, and labels restore their original 200 ms transition.
+Curves apply to each animation from its current scale, preserving position
+when rapid selections interrupt the motion. The centered collapse/expand
+sequence, fixed icons and reduced-motion behavior are preserved; explicit
+animation durations apply on the next interaction after hot reload.
+
+Verified on 2026-10-13: Flutter analysis and all four app_tabs_test tests passed.
+Hot reload succeeded and runtime inspection reported no errors. Diff whitespace
+checks passed. No build, remote download or recorded animation inspection was
+performed. Next: user review of the gentler exit and restored entrance speed.
+
+## Previous Checkpoint: Persistent Primary Tabs
+
+Home, Downloads and Settings now share one AppScaffold and switch within a lazy
+IndexedStack. Primary navigation, the Settings shortcut, dependency setup and
+Home download actions select tabs without pushing routes. Visited pages retain
+state and scroll positions; inactive panels suppress focus and tickers. The
+app bar no longer presents a back arrow for these primary destinations.
+
+Previous-download links can reveal the same task repeatedly by renewing only
+the history list's reveal request. Settings refresh saved values when revisited;
+quality/container fields expand within narrow layouts. Download orchestration,
+providers and media processing are unchanged.
+
+Verified on 2026-10-13: 74 navigation/Home/Downloads/layout tests passed, followed
+by all four focused tab-state tests after adding scroll-retention checks.
+Flutter analysis, Linux debug build and diff whitespace checks passed. A hot
+restart on empty Home applied the new root; runtime inspection confirmed AppTabs,
+one shared Scaffold/NavigationRail, and no runtime errors. No remote download
+was run. The separate bottom-navigation animation edits in the workspace were
+preserved.
+
+The Linux taskbar icon issue found at this checkpoint is resolved above under
+Linux Taskbar Bird Icon.
+
+## Previous Checkpoint: Bottom Navigation Indicator Animation
+
+The compact Home/Downloads/Settings indicator now contracts into its center
+over 140 ms, then expands at the selected destination over 220 ms. Icons stay
+fixed; only the themed indicator scales. Rapid selections target the latest
+destination, and reduced-motion settings settle the indicator immediately.
+The existing Material NavigationBar retains labels, focus, hit targets and
+semantics. The current shared AppScaffold in AppTabs keeps its animation state
+mounted across tab changes; that tab-shell work was already being edited in
+the workspace during this change.
+
+Verified on 2026-10-13: Flutter analysis, all 9 tests in app_tabs_test,
+android_layout_test and widget_test, and diff whitespace checks passed.
+An initial narrow-tab overflow also reproduced with the original navigation
+widget; the final shared-shell version passes. Hot reload succeeded and runtime
+error inspection reported none. No build, remote download, or recorded visual
+animation inspection was performed. Next: review the motion in the running app.
+
+## Previous Checkpoint: CatchIt Visual Theme
 
 Presentation-only refresh based on `output/catchit-v3-swift.png`. Light mode
 uses violet and soft lavender surfaces with lime navigation accents. Following
@@ -1026,7 +1174,7 @@ Data root: `$XDG_DATA_HOME/universal_downloader`, default
 under `temp/download_task_<id>/`, updates under `tools/`. Preferences use
 shared_preferences key `settings_v1`. `library.sqlite` holds completed-download history, pending download recovery
 records, and the five-minute link cache. Unfinished tasks restore as Interrupted;
-theme and unsent Home drafts are not persisted.
+theme uses the separate `theme_mode` preference; unsent Home drafts are not persisted.
 Linux output defaults to Videos when present, otherwise Downloads, unless overridden.
 Android app data is under files/universal_downloader; completed public downloads
 are under Downloads/UniversalDownloader in a unique folder per task.
