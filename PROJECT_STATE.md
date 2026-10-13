@@ -2,53 +2,45 @@
 
 Last updated: 2026-10-13 (Africa/Cairo).
 
-## Git Preparation and Verification
+## Current Checkpoint: CatchIt Visual Theme
 
-Changes are grouped into separate Conventional Commits for persistent download
-recovery and pause/resume, playlist and batch selection, settings focus and save
-handling, CatchIt Swift branding, and these documentation checkpoints. Approved
-branding assets are included; design explorations in `output/` remain local.
+Presentation-only refresh based on `output/catchit-v3-swift.png`. Light mode
+uses violet and soft lavender surfaces with lime navigation accents. Following
+user review, dark mode uses neutral charcoal surfaces, white CatchIt lettering,
+saturated violet action buttons and restrained lime accents. Cards, fields,
+navigation and dialogs have coordinated rounded corners and stronger headings.
+Home has a short introduction; empty Downloads uses the existing Swift icon.
+Completed status wraps safely at narrow widths and enlarged text. Selected
+playlist rows use readable primary-container colors.
 
-Pre-push validation on 2026-10-13: 87 targeted unit/integration tests passed,
-including real yt-dlp localhost resumption after interruption, pause/resume and
-shutdown. Earlier branding validation also passed analysis, 67 widget tests and
-the Linux debug build. Remote YouTube tests were not run for this preparation.
+The user rejected the experimental hover glow. It was fully removed: cards have
+static borders, without hover halos or extra hover state. Download/provider,
+queue, selection, persistence, audio/subtitle and merge logic remain unchanged.
+Existing Home/Downloads/layout tests now use the real application themes and
+wait for scrolling before interaction; playlist layout tests scroll to the
+second lazy row instead of requiring every row to remain mounted together.
 
-## Current Branding: CatchIt Swift
+Verified on 2026-10-13: all 323 local unit/widget tests passed for the accepted
+static-border version, including quality/audio/subtitle selections and responsive
+Home/Downloads layouts. Flutter analysis, Linux debug build, and diff whitespace
+checks passed.
+Both theme palettes passed sampled text/foreground contrast checks at 4.5:1;
+light/dark desktop and narrow widget previews were rendered and inspected.
+Hot reload succeeded and the running app reported no runtime errors after
+removing the glow. No remote download was performed. Next: normal use.
 
-The user selected `output/catchit-v3-swift.png`, superseding Orbit. Its exact
-1254×1254 RGBA logo is copied to `assets/branding/catchit-logo.png`. The
-standalone bird icon was extracted with imagegen and exported at 512×512 to
-`assets/branding/catchit-icon.png`; prompt: `output/catchit-swift-icon-prompt.txt`.
-The shared app bar displays the bird beside CatchIt. MaterialApp and the Linux
-native window use CatchIt. Linux loads the bundled icon and packages a desktop
-entry and hicolor icon. Package IDs, executable and storage paths stay unchanged.
-Other platforms' native launcher resources have not been changed.
+## Branding: CatchIt Swift
 
-Verified: Flutter analysis, 67 existing Home/playlist/Downloads widget tests,
-Linux debug build, and diff whitespace checks passed. The bundled and installed
-512×512 icons match the Swift asset. Hot reload succeeded; live screenshot
-confirmed the Swift bird and CatchIt header, with no runtime errors. The current
-process still has its old native title; the new title/window icon take effect
-when the rebuilt application is reopened. No running download was interrupted.
+The selected 1254×1254 RGBA logo is copied to `assets/branding/catchit-logo.png`.
+The existing standalone 512×512 bird is `assets/branding/catchit-icon.png`.
+MaterialApp and the Linux native window use CatchIt; Linux packages the icon
+and desktop entry. Package IDs, executable and storage paths stay unchanged.
+Other platforms' native launcher resources remain unchanged. The running
+process can retain its previous native title until reopened.
 
-## Current Checkpoint: Multi-download Removal Confirmation
-
-Every remove × in Your videos and playlist groups now asks for confirmation:
-ordinary videos (ready/loading/failed), individual playlist videos, and whole
-playlists. The dialog names the target and explains that its draft settings will
-be lost; playlist removal covers all remaining group videos. Cancel is focused
-by default. Cancel, Escape and dismissal leave drafts and selections unchanged.
-Loading playlists are cancelled only after confirmation. Removal rechecks that
-Home and the target still exist after the dialog, including metadata completion
-while it is open. Existing queued downloads/files are unaffected.
-
-Verified on 2026-10-13: all 58 Home/playlist/paint tests passed, including
-cancel/Escape/barrier dismissal at 375px with enlarged text in both themes,
-individual/group confirmation, keeping a loading playlist, confirmed loading
-removal and metadata completion during confirmation. Flutter analysis and diff
-whitespace checks passed. Hot reload succeeded and no runtime errors were found.
-No build or remote download was performed. Next: normal use.
+Multi-download removal confirmations remain in place for ordinary videos,
+playlist videos and whole playlists. Dismissal keeps drafts and selections;
+confirmed removal affects drafts, not queued downloads or saved files.
 
 ## Previous Checkpoint: Batch and Individual Video Folders
 
