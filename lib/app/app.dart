@@ -5,7 +5,7 @@ import 'app_controller.dart';
 import 'routes.dart';
 import 'theme/app_theme.dart';
 
-/// Root widget of Universal Downloader.
+/// Root widget of CatchIt.
 class UniversalDownloaderApp extends StatelessWidget {
   const UniversalDownloaderApp({super.key, required this.controller});
 
@@ -19,7 +19,7 @@ class UniversalDownloaderApp extends StatelessWidget {
         listenable: controller,
         builder: (context, _) {
           return MaterialApp(
-            title: 'Universal Downloader',
+            title: 'CatchIt',
             debugShowCheckedModeBanner: false,
             theme: AppTheme.light(),
             darkTheme: AppTheme.dark(),

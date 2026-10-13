@@ -1,4 +1,9 @@
-# Universal Downloader
+# CatchIt
+
+CatchIt uses the approved Swift identity: a purple bird catching a lime diamond.
+The logo and standalone icon are in `assets/branding/`. The Dart package and
+executable remain `universal_downloader`; existing application IDs and storage
+paths are preserved for compatibility.
 
 A Flutter (Material 3) media downloader for Linux desktop, with an Android preview
 and a Windows x64 implementation awaiting native build validation.

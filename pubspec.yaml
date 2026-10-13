@@ -1,5 +1,5 @@
 name: universal_downloader
-description: "Universal Downloader - a generic media downloader for Linux desktop. Detects the provider from a pasted URL and downloads video + audio streams."
+description: "CatchIt - a media downloader for Linux desktop. Detects the provider from a pasted URL and downloads video + audio streams."
 publish_to: 'none'
 version: 1.0.0+1
 
@@ -28,3 +28,5 @@ dev_dependencies:
 
 flutter:
   uses-material-design: true
+  assets:
+    - assets/branding/

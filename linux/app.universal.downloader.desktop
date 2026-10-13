@@ -1,0 +1,9 @@
+[Desktop Entry]
+Type=Application
+Name=CatchIt
+Comment=Download videos and audio from a link
+Exec=universal_downloader
+Icon=app.universal.downloader
+Terminal=false
+Categories=Network;AudioVideo;
+StartupWMClass=app.universal.downloader

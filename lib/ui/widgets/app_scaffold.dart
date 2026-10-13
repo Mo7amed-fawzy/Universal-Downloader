@@ -4,6 +4,7 @@ import 'package:provider/provider.dart';
 import '../../app/app_controller.dart';
 import '../../app/routes.dart';
 import 'app_bottom_navigation.dart';
+import 'app_brand.dart';
 
 /// Shared desktop scaffold: top bar + navigation rail + body.
 class AppScaffold extends StatelessWidget {
@@ -23,11 +24,7 @@ class AppScaffold extends StatelessWidget {
     final compact = MediaQuery.sizeOf(context).width < 600;
     return Scaffold(
       appBar: AppBar(
-        title: const Text(
-          'Universal Downloader',
-          maxLines: 1,
-          overflow: TextOverflow.ellipsis,
-        ),
+        title: const AppBrand(),
         actions: [_ThemeToggle(), _SettingsButton()],
       ),
       body: compact
