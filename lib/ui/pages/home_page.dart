@@ -10,19 +10,25 @@ import '../../core/errors/downloader_exceptions.dart';
 import '../../core/models/audio_format.dart';
 import '../../core/models/download_options.dart';
 import '../../core/models/video_format.dart';
+import '../../core/process/cancel_token.dart';
 import '../../core/utils/language_names.dart';
 import '../../downloads/download_repository.dart';
 import '../../providers/downloader_provider.dart';
 import '../../providers/format_selector.dart';
+import '../../providers/youtube/youtube_playlist.dart';
 import '../widgets/dependency_banner.dart';
 import '../widgets/download_tile.dart';
 import '../widgets/error_dialog.dart';
 import '../widgets/home_video_list.dart';
 import '../widgets/home_video_settings.dart';
+import '../widgets/home_playlist_card.dart';
+import '../widgets/home_remove_confirmation_dialog.dart';
+import '../widgets/playlist_url_dialog.dart';
 import '../widgets/url_input_card.dart';
 import '../widgets/app_scaffold.dart';
 import 'home_video_draft.dart';
 import 'home_video_entry.dart';
+import 'home_playlist_entry.dart';
 import 'downloads_navigation.dart';
 
 /// Main screen: URLs → prepare videos → choose individual formats → download.
@@ -44,10 +50,19 @@ class _HomePageState extends State<HomePage> {
   DownloaderProvider? _provider;
   String? _errorMessage;
   final _entries = <HomeVideoEntry>[];
+  final _playlists = <HomePlaylistEntry>[];
+  List<HomeVideoEntry> get _regularEntries =>
+      _entries.where((entry) => entry.playlist == null).toList();
+  List<HomeVideoDraft> get _regularDrafts => _regularEntries
+      .where((entry) => entry.selectedForDownload)
+      .map((entry) => entry.draft)
+      .whereType<HomeVideoDraft>()
+      .toList();
   List<HomeVideoDraft> get _drafts =>
       _entries.map((entry) => entry.draft).whereType<HomeVideoDraft>().toList();
   HomeVideoDraft? _selected;
   bool _collapsed = false;
+  String? _regularOutputDirectory;
   bool _submitting = false;
 
   static const _selector = FormatSelector();
@@ -61,6 +76,9 @@ class _HomePageState extends State<HomePage> {
 
   @override
   void dispose() {
+    for (final playlist in _playlists) {
+      playlist.cancelToken.cancel();
+    }
     _urlController.removeListener(_onUrlChanged);
     _urlController.dispose();
     _urlFocusNode.dispose();
@@ -81,11 +99,153 @@ class _HomePageState extends State<HomePage> {
               _provider == null
           ? 'Unsupported website.\nThis website is not supported yet.'
           : null;
+      if (!context.read<AppController>().settings.multiDownloadMode &&
+          url != null &&
+          YoutubePlaylist.isPlaylistUrl(url)) {
+        _errorMessage =
+            'Enable Multi-download mode in Settings to add a playlist.';
+        _singleVideo = null;
+      }
     });
   }
 
   bool _isValidUrl(Uri url) =>
       (url.scheme == 'http' || url.scheme == 'https') && url.host.isNotEmpty;
+
+  Future<void> _showPlaylistDialog() async {
+    if (!context.read<AppController>().settings.multiDownloadMode) return;
+    final current = Uri.tryParse(_urlController.text.trim());
+    final url = await showDialog<Uri>(
+      context: context,
+      builder: (_) => PlaylistUrlDialog(
+        initialUrl:
+            current != null && YoutubePlaylist.normalizeUrl(current) != null
+            ? current.toString()
+            : '',
+      ),
+    );
+    if (!mounted ||
+        url == null ||
+        !context.read<AppController>().settings.multiDownloadMode) {
+      return;
+    }
+    _addPlaylist(url);
+  }
+
+  void _addPlaylist(Uri url) {
+    if (!context.read<AppController>().settings.multiDownloadMode) return;
+    final normalized = YoutubePlaylist.normalizeUrl(url);
+    if (normalized == null) {
+      setState(
+        () => _errorMessage = 'Enter a YouTube playlist link containing list=.',
+      );
+      return;
+    }
+    final existing = _playlists
+        .where((entry) => entry.url == normalized)
+        .firstOrNull;
+    if (existing != null) {
+      setState(() => existing.collapsed = false);
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('This playlist is already added.')),
+      );
+      return;
+    }
+    final playlist = HomePlaylistEntry(normalized)
+      ..selectOutputDirectory(
+        context.read<AppController>().resolveOutputDirectory(),
+      );
+    setState(() => _playlists.add(playlist));
+    unawaited(_fetchPlaylist(playlist));
+  }
+
+  Future<void> _fetchPlaylist(HomePlaylistEntry playlist) async {
+    final controller = context.read<AppController>();
+    if (!controller.settings.multiDownloadMode || controller.updatingTools) {
+      return;
+    }
+    setState(() {
+      playlist.fetching = true;
+      playlist.errorMessage = null;
+      playlist.cancelToken = CancelToken();
+    });
+    try {
+      final result = await controller.fetchYoutubePlaylist(
+        playlist.url,
+        cancelToken: playlist.cancelToken,
+      );
+      if (!mounted || !_playlists.contains(playlist)) return;
+      setState(() {
+        playlist.title = result.title;
+        playlist.unavailableCount = result.unavailableCount;
+        playlist.fetching = false;
+        if (result.videoUrls.isEmpty) {
+          playlist.errorMessage =
+              'No videos could be found. The playlist may be empty or unavailable.';
+        }
+        for (final url in result.videoUrls) {
+          _entries.add(HomeVideoEntry(url.toString(), playlist: playlist));
+        }
+      });
+      await _fetchPending();
+    } catch (error) {
+      if (!mounted || !_playlists.contains(playlist)) return;
+      setState(() {
+        playlist.fetching = false;
+        playlist.errorMessage = switch (error) {
+          DownloaderException() => error.message,
+          FormatException() => error.message,
+          _ => 'Could not load this playlist. Please try again.',
+        };
+      });
+    }
+  }
+
+  Future<void> _removePlaylist(HomePlaylistEntry playlist) async {
+    final confirmed = await HomeRemoveConfirmationDialog.confirm(
+      context,
+      title: playlist.title,
+      isPlaylist: true,
+    );
+    if (!mounted || !confirmed || !_playlists.contains(playlist)) return;
+    playlist.cancelToken.cancel();
+    setState(() {
+      if (_entries.any(
+        (entry) => entry.playlist == playlist && entry.draft == _selected,
+      )) {
+        _selected = null;
+      }
+      _entries.removeWhere((entry) => entry.playlist == playlist);
+      _playlists.remove(playlist);
+    });
+  }
+
+  void _selectPlaylistDirectory(HomePlaylistEntry playlist, String directory) {
+    if (!mounted || !_playlists.contains(playlist)) return;
+    setState(() {
+      playlist.selectOutputDirectory(directory);
+      for (final entry in _entries.where(
+        (entry) => entry.playlist == playlist,
+      )) {
+        entry.draft?.input.selectOutputDirectory(directory);
+      }
+    });
+  }
+
+  void _selectRegularDirectory(String directory) {
+    if (!mounted) return;
+    setState(() {
+      _regularOutputDirectory = directory;
+      for (final entry in _regularEntries) {
+        entry.draft?.input.selectOutputDirectory(directory);
+      }
+    });
+  }
+
+  void _selectVideoDirectory(HomeVideoDraft draft, String directory) {
+    if (!mounted || !_drafts.contains(draft)) return;
+    setState(() => draft.input.selectOutputDirectory(directory));
+  }
 
   void _viewPreviousDownload() {
     final matches = context
@@ -119,15 +279,22 @@ class _HomePageState extends State<HomePage> {
       return;
     }
     final links = text.split(RegExp(r'\s+')).toSet();
+    final playlistLinks = <Uri>[];
     setState(() {
       for (final link in links) {
-        if (!_entries.any((entry) => entry.link == link)) {
+        final url = Uri.tryParse(link);
+        if (url != null && YoutubePlaylist.isPlaylistUrl(url)) {
+          playlistLinks.add(url);
+        } else if (!_regularEntries.any((entry) => entry.link == link)) {
           _entries.add(HomeVideoEntry(link));
         }
       }
       _collapsed = false;
     });
     _urlController.clear();
+    for (final url in playlistLinks) {
+      _addPlaylist(url);
+    }
     await _fetchPending();
   }
 
@@ -148,6 +315,14 @@ class _HomePageState extends State<HomePage> {
       return;
     }
     final provider = controller.registry.resolve(url);
+    if (YoutubePlaylist.isPlaylistUrl(url)) {
+      setState(() {
+        _singleVideo = null;
+        _errorMessage =
+            'Enable Multi-download mode in Settings to add a playlist.';
+      });
+      return;
+    }
     if (provider == null) {
       setState(() {
         _provider = null;
@@ -250,9 +425,11 @@ class _HomePageState extends State<HomePage> {
           final info = await controller.fetchMediaInfo(provider, url);
           if (!mounted) return;
           if (!_entries.contains(entry)) continue;
-          if (_drafts.any(
-            (draft) =>
-                draft.provider.id == provider.id && draft.info.id == info.id,
+          if (_entries.any(
+            (other) =>
+                other.playlist == entry.playlist &&
+                other.draft?.provider.id == provider.id &&
+                other.draft?.info.id == info.id,
           )) {
             setState(() => _entries.remove(entry));
             continue;
@@ -261,10 +438,14 @@ class _HomePageState extends State<HomePage> {
             info: info,
             provider: provider,
             preferredLanguage: controller.settings.preferredLanguage,
-            outputDirectory: controller.resolveOutputDirectory(),
+            outputDirectory: entry.playlist == null
+                ? _regularOutputDirectory ?? controller.resolveOutputDirectory()
+                : entry.playlist?.outputDirectory.isNotEmpty == true
+                ? entry.playlist!.outputDirectory
+                : controller.resolveOutputDirectory(),
             containerPreference: controller.settings.containerPreference,
           );
-          added.add(draft);
+          if (entry.playlist == null) added.add(draft);
           setState(() {
             entry.draft = draft;
             entry.fetching = false;
@@ -290,7 +471,16 @@ class _HomePageState extends State<HomePage> {
         controller.settings.multiDownloadMode &&
         controller.settings.autoStartDownload &&
         added.isNotEmpty) {
-      _startDownloads(added, navigate: false);
+      _startDownloads(
+        _entries
+            .where(
+              (entry) =>
+                  entry.selectedForDownload && added.contains(entry.draft),
+            )
+            .map((entry) => entry.draft!)
+            .toList(),
+        navigate: false,
+      );
     }
   }
 
@@ -300,7 +490,12 @@ class _HomePageState extends State<HomePage> {
     _fetchPending();
   }
 
-  void _removeEntry(HomeVideoEntry entry) {
+  Future<void> _removeEntry(HomeVideoEntry entry) async {
+    final confirmed = await HomeRemoveConfirmationDialog.confirm(
+      context,
+      title: entry.draft?.info.title ?? entry.link,
+    );
+    if (!mounted || !confirmed || !_entries.contains(entry)) return;
     setState(() {
       _entries.remove(entry);
       if (_selected == entry.draft) _selected = null;
@@ -322,9 +517,54 @@ class _HomePageState extends State<HomePage> {
     });
   }
 
+  void _applyPlaylistSettings(
+    HomeVideoDraft source,
+    HomePlaylistEntry playlist,
+  ) {
+    var missingSubtitles = 0;
+    final targets = _entries
+        .where((entry) => entry.playlist == playlist)
+        .map((entry) => entry.draft)
+        .whereType<HomeVideoDraft>();
+    setState(() {
+      playlist.selectOutputDirectory(source.input.outputDirectory);
+      for (final draft in targets) {
+        if (draft == source) continue;
+        final input = draft.input;
+        final selected = source.input;
+        input.selectVideoHeight(selected.videoHeight);
+        input.selectAudioLanguage(selected.audioLanguage);
+        input.selectAudioBitrate(selected.audioBitrate);
+        input.selectAutoBestAudio(selected.autoBestAudio);
+        input.selectContainer(selected.containerPreference);
+        input.selectOutputDirectory(selected.outputDirectory);
+        final subtitle = draft.info.subtitleTracks
+            .where((track) => track.id == selected.subtitle?.id)
+            .firstOrNull;
+        input.selectSubtitle(subtitle);
+        input.selectDownloadSubtitleFile(selected.downloadSubtitleFile);
+        if (selected.downloadSubtitleFile && subtitle == null) {
+          missingSubtitles++;
+        }
+        draft.errorMessage = null;
+      }
+    });
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(
+        content: Text(
+          'Settings applied to this playlist.${missingSubtitles > 0 ? ' Subtitles are unavailable for $missingSubtitles videos.' : ''}',
+        ),
+      ),
+    );
+  }
+
   void _startDownloads(List<HomeVideoDraft> drafts, {bool navigate = true}) {
     final controller = context.read<AppController>();
-    if (_submitting || controller.updatingTools) return;
+    if (_submitting ||
+        controller.updatingTools ||
+        !controller.settings.multiDownloadMode) {
+      return;
+    }
     final pending = drafts.where(_drafts.contains).toList();
     if (pending.isEmpty) return;
     setState(() => _submitting = true);
@@ -333,6 +573,8 @@ class _HomePageState extends State<HomePage> {
     for (final draft in pending) {
       try {
         lastDirectory = _queueDownload(draft);
+        final entry = _entries.firstWhere((entry) => entry.draft == draft);
+        if (entry.playlist != null) entry.playlist!.queuedCount++;
         _entries.removeWhere((entry) => entry.draft == draft);
         if (_selected == draft) _selected = null;
       } catch (error) {
@@ -486,10 +728,10 @@ class _HomePageState extends State<HomePage> {
       }
       return;
     }
-    if (_urlController.text.trim().isNotEmpty || _drafts.isEmpty) {
+    if (_urlController.text.trim().isNotEmpty || _regularDrafts.isEmpty) {
       _fetchInfo();
     } else {
-      _startDownloads(_drafts);
+      _startDownloads(_regularDrafts);
     }
   }
 
@@ -498,6 +740,12 @@ class _HomePageState extends State<HomePage> {
     final controller = context.watch<AppController>();
     final multiDownloadMode = controller.settings.multiDownloadMode;
     final selected = multiDownloadMode ? _selected : _singleVideo;
+    final selectedPlaylist = selected == null
+        ? null
+        : _entries
+              .where((entry) => entry.draft == selected)
+              .firstOrNull
+              ?.playlist;
     final busy =
         _submitting ||
         controller.updatingTools ||
@@ -574,6 +822,7 @@ class _HomePageState extends State<HomePage> {
                                       .whereType<Uri>(),
                                 ),
                             onViewDownloads: _viewPreviousDownload,
+                            onAddPlaylist: _showPlaylistDialog,
                           ),
                         ),
                         if (multiDownloadMode &&
@@ -581,7 +830,7 @@ class _HomePageState extends State<HomePage> {
                           const Padding(
                             padding: EdgeInsets.all(8),
                             child: Text(
-                              'Auto-start is on: new videos download after fetching. '
+                              'Auto-start is on: individual videos download after fetching. Playlists wait for review. '
                               'Turn it off in Settings to review them first.',
                             ),
                           ),
@@ -592,6 +841,9 @@ class _HomePageState extends State<HomePage> {
                             child: HomeVideoSettings(
                               key: ValueKey(selected.id),
                               draft: selected,
+                              onClearSelection: multiDownloadMode
+                                  ? () => setState(() => _selected = null)
+                                  : null,
                               preferredLanguage:
                                   controller.settings.preferredLanguage,
                               onChanged: () =>
@@ -603,17 +855,87 @@ class _HomePageState extends State<HomePage> {
                                   : _startSingleDownload,
                             ),
                           ),
+                          if (selectedPlaylist != null)
+                            Align(
+                              alignment: Alignment.centerLeft,
+                              child: TextButton.icon(
+                                onPressed:
+                                    busy ||
+                                        _entries.any(
+                                          (entry) =>
+                                              entry.playlist ==
+                                                  selectedPlaylist &&
+                                              (entry.waiting || entry.fetching),
+                                        )
+                                    ? null
+                                    : () => _applyPlaylistSettings(
+                                        selected,
+                                        selectedPlaylist,
+                                      ),
+                                icon: const Icon(Icons.playlist_add_check),
+                                label: const Text(
+                                  'Apply these settings to playlist',
+                                ),
+                              ),
+                            ),
                         ],
-                        if (multiDownloadMode && _entries.isNotEmpty) ...[
+                        if (multiDownloadMode)
+                          for (final playlist in _playlists) ...[
+                            const SizedBox(height: 20),
+                            HomePlaylistCard(
+                              key: ObjectKey(playlist),
+                              playlist: playlist,
+                              outputDirectory: playlist.outputDirectory.isEmpty
+                                  ? controller.resolveOutputDirectory()
+                                  : playlist.outputDirectory,
+                              onOutputDirectoryChanged: (directory) =>
+                                  _selectPlaylistDirectory(playlist, directory),
+                              entries: _entries
+                                  .where((entry) => entry.playlist == playlist)
+                                  .toList(),
+                              selected: selected,
+                              onSelect: _selectDraft,
+                              onSelectionChanged: () => setState(() {}),
+                              onRetryVideo: _retryEntry,
+                              onRemoveVideo: _removeEntry,
+                              onRetry: () => _fetchPlaylist(playlist),
+                              onRemove: () => _removePlaylist(playlist),
+                              onToggleCollapsed: () => setState(
+                                () => playlist.collapsed = !playlist.collapsed,
+                              ),
+                              onDownload: busy
+                                  ? null
+                                  : () => _startDownloads(
+                                      _entries
+                                          .where(
+                                            (entry) =>
+                                                entry.playlist == playlist &&
+                                                entry.selectedForDownload,
+                                          )
+                                          .map((entry) => entry.draft)
+                                          .whereType<HomeVideoDraft>()
+                                          .toList(),
+                                      navigate: false,
+                                    ),
+                            ),
+                          ],
+                        if (multiDownloadMode &&
+                            _regularEntries.isNotEmpty) ...[
                           const SizedBox(height: 24),
                           HomeVideoList(
-                            entries: _entries,
+                            entries: _regularEntries,
+                            outputDirectory:
+                                _regularOutputDirectory ??
+                                controller.resolveOutputDirectory(),
+                            onOutputDirectoryChanged: _selectRegularDirectory,
+                            onVideoDirectoryChanged: _selectVideoDirectory,
                             onRetry: _retryEntry,
                             selected: selected,
                             collapsed: _collapsed,
                             onToggleCollapsed: () =>
                                 setState(() => _collapsed = !_collapsed),
                             onSelect: _selectDraft,
+                            onSelectionChanged: () => setState(() {}),
                             onRemove: _removeEntry,
                           ),
                           const SizedBox(height: 16),
@@ -626,11 +948,13 @@ class _HomePageState extends State<HomePage> {
                           Align(
                             alignment: Alignment.centerRight,
                             child: FilledButton.icon(
-                              onPressed: busy || _drafts.isEmpty
+                              onPressed: busy || _regularDrafts.isEmpty
                                   ? null
-                                  : () => _startDownloads(_drafts),
+                                  : () => _startDownloads(_regularDrafts),
                               icon: const Icon(Icons.download),
-                              label: Text('Download all (${_drafts.length})'),
+                              label: Text(
+                                'Download ${_regularEntries.every((entry) => entry.selectedForDownload) ? 'all' : 'selected'} (${_regularDrafts.length})',
+                              ),
                               style: FilledButton.styleFrom(
                                 minimumSize: const Size(220, 52),
                               ),
@@ -654,7 +978,7 @@ class _HomePageState extends State<HomePage> {
                           Theme.of(context).platform == TargetPlatform.android
                               ? 'Keep the app open while downloading in this preview.'
                               : multiDownloadMode
-                              ? 'Tip: press Ctrl+Enter to add videos or download all. Drag & drop URLs anywhere on this page.'
+                              ? 'Tip: Ctrl+Enter adds links or downloads individual videos. Use Download playlist for each playlist group.'
                               : 'Tip: press Ctrl+Enter to fetch or download. Drag & drop a URL anywhere on this page.',
                           style: Theme.of(context).textTheme.bodySmall,
                         ),

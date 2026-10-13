@@ -4,11 +4,17 @@ import '../pages/home_video_draft.dart';
 import '../pages/home_video_entry.dart';
 import 'home_video_fetch_card.dart';
 import 'home_video_card.dart';
+import 'home_download_selection.dart';
+import 'output_folder_row.dart';
 
 class HomeVideoList extends StatefulWidget {
   const HomeVideoList({
     super.key,
     required this.entries,
+    required this.outputDirectory,
+    required this.onOutputDirectoryChanged,
+    required this.onVideoDirectoryChanged,
+    required this.onSelectionChanged,
     required this.onRetry,
     required this.selected,
     required this.collapsed,
@@ -18,6 +24,10 @@ class HomeVideoList extends StatefulWidget {
   });
 
   final List<HomeVideoEntry> entries;
+  final String outputDirectory;
+  final ValueChanged<String> onOutputDirectoryChanged;
+  final void Function(HomeVideoDraft, String) onVideoDirectoryChanged;
+  final VoidCallback onSelectionChanged;
   final ValueChanged<HomeVideoEntry> onRetry;
   final HomeVideoDraft? selected;
   final bool collapsed;
@@ -61,6 +71,10 @@ class _HomeVideoListState extends State<HomeVideoList> {
             ),
           ],
         ),
+        HomeDownloadSelection(
+          entries: widget.entries,
+          onChanged: widget.onSelectionChanged,
+        ),
         if (!widget.collapsed) ...[
           const SizedBox(height: 8),
           LayoutBuilder(
@@ -89,7 +103,13 @@ class _HomeVideoListState extends State<HomeVideoList> {
                                   key: ValueKey(
                                     widget.entries[index].draft!.id,
                                   ),
-                                  draft: widget.entries[index].draft!,
+                                  entry: widget.entries[index],
+                                  onOutputDirectoryChanged: (directory) =>
+                                      widget.onVideoDirectoryChanged(
+                                        widget.entries[index].draft!,
+                                        directory,
+                                      ),
+                                  onSelectionChanged: widget.onSelectionChanged,
                                   selected:
                                       widget.selected ==
                                       widget.entries[index].draft,
@@ -102,6 +122,7 @@ class _HomeVideoListState extends State<HomeVideoList> {
                               : HomeVideoFetchCard(
                                   key: ObjectKey(widget.entries[index]),
                                   entry: widget.entries[index],
+                                  onSelectionChanged: widget.onSelectionChanged,
                                   onRemove: () =>
                                       widget.onRemove(widget.entries[index]),
                                   onRetry: () =>
@@ -116,6 +137,12 @@ class _HomeVideoListState extends State<HomeVideoList> {
             },
           ),
         ],
+        const SizedBox(height: 8),
+        OutputFolderRow(
+          directory: widget.outputDirectory,
+          label: 'Folder for all videos',
+          onChanged: widget.onOutputDirectoryChanged,
+        ),
       ],
     );
   }

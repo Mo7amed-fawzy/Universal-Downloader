@@ -4,6 +4,7 @@ import '../../core/errors/downloader_exceptions.dart';
 import '../../core/process/cancel_token.dart';
 import '../../core/process/command_runner.dart';
 import '../../core/process/process_runner.dart';
+import 'youtube_playlist.dart';
 
 /// Runs yt-dlp to extract structured JSON metadata for a URL.
 ///
@@ -15,13 +16,58 @@ class YoutubeExtractor {
     required String ytDlpPath,
     CommandRunner? runner,
     List<String> extraArgs = const [],
-  })  : _ytDlpPath = ytDlpPath, // ignore: prefer_initializing_formals
-        _runner = runner ?? const ProcessRunner(),
-        _extraArgs = extraArgs; // ignore: prefer_initializing_formals
+  }) : _ytDlpPath = ytDlpPath, // ignore: prefer_initializing_formals
+       _runner = runner ?? const ProcessRunner(),
+       _extraArgs = extraArgs; // ignore: prefer_initializing_formals
 
   final String _ytDlpPath;
   final CommandRunner _runner;
   final List<String> _extraArgs;
+
+  Future<YoutubePlaylist> extractPlaylist(
+    Uri url, {
+    CancelToken? cancelToken,
+  }) async {
+    final playlistUrl = YoutubePlaylist.normalizeUrl(url);
+    if (playlistUrl == null) {
+      throw const FormatException(
+        'Enter a YouTube playlist link containing list=.',
+      );
+    }
+    final result = await _runner.run(
+      executable: _ytDlpPath,
+      arguments: [
+        ..._extraArgs,
+        '--ignore-config',
+        '--no-warnings',
+        '--no-color',
+        '--yes-playlist',
+        '--flat-playlist',
+        '--dump-single-json',
+        '--skip-download',
+        '--ignore-errors',
+        '--',
+        playlistUrl.toString(),
+      ],
+      cancelToken: cancelToken,
+    );
+    cancelToken?.throwIfCancelled();
+    if (!result.success) {
+      throw FormatExtractionException(
+        'Could not load this playlist. Check the link and make sure it is public or unlisted.',
+        details: _cleanError(result.stderr),
+      );
+    }
+    try {
+      final json = jsonDecode(result.stdout);
+      if (json is! Map<String, dynamic>) throw const FormatException();
+      return YoutubePlaylist.fromJson(json);
+    } on FormatException {
+      throw FormatExtractionException(
+        'Could not read the playlist. Please try again.',
+      );
+    }
+  }
 
   /// Remote components requested from GitHub for EJS patching.
   static const String remoteComponents = 'ejs:github';
@@ -32,8 +78,7 @@ class YoutubeExtractor {
       'youtube:player_client=ios,web_embedded,default';
 
   /// Player clients for m3u8/HLS progressive stream access.
-  static const String hlsExtractorArgs =
-      'youtube:player_client=tv_embedded';
+  static const String hlsExtractorArgs = 'youtube:player_client=tv_embedded';
 
   /// Player clients for downloading video (no ios — causes 403).
   static const String downloadExtractorArgs =
@@ -86,8 +131,10 @@ class YoutubeExtractor {
   }
 
   /// Extraction base args including user-configured extras.
-  List<String> fullExtractionBaseArgs() =>
-      [...extractionBaseArgs(), ..._extraArgs];
+  List<String> fullExtractionBaseArgs() => [
+    ...extractionBaseArgs(),
+    ..._extraArgs,
+  ];
 
   /// Parses `yt-dlp -F` text output to discover m3u8 progressive streams
   /// and their language tags.
@@ -149,7 +196,9 @@ class YoutubeExtractor {
     final results = <M3u8Progressive>[];
     for (final line in stdout.split('\n')) {
       final trimmed = line.trim();
-      if (trimmed.isEmpty || trimmed.startsWith('ID') || trimmed.startsWith('-')) {
+      if (trimmed.isEmpty ||
+          trimmed.startsWith('ID') ||
+          trimmed.startsWith('-')) {
         continue;
       }
 
@@ -163,13 +212,15 @@ class YoutubeExtractor {
         final wh = resolution.split('x');
         final width = int.tryParse(wh.first);
         final height = wh.length > 1 ? int.tryParse(wh[1]) : null;
-        results.add(M3u8Progressive(
-          formatId: formatId,
-          ext: ext,
-          width: width,
-          height: height,
-          language: lang,
-        ));
+        results.add(
+          M3u8Progressive(
+            formatId: formatId,
+            ext: ext,
+            width: width,
+            height: height,
+            language: lang,
+          ),
+        );
         continue;
       }
 
@@ -179,13 +230,15 @@ class YoutubeExtractor {
         final formatId = match.group(1)!;
         final ext = match.group(2)!;
         final lang = match.group(3)!;
-        results.add(M3u8Progressive(
-          formatId: formatId,
-          ext: ext,
-          width: null,
-          height: null,
-          language: lang,
-        ));
+        results.add(
+          M3u8Progressive(
+            formatId: formatId,
+            ext: ext,
+            width: null,
+            height: null,
+            language: lang,
+          ),
+        );
       }
     }
     return results;

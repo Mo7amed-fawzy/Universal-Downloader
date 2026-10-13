@@ -14,6 +14,12 @@ import 'package:universal_downloader/core/models/download_options.dart';
 import 'package:universal_downloader/core/models/media_info.dart';
 import 'package:universal_downloader/core/models/subtitle_track.dart';
 import 'package:universal_downloader/core/models/video_format.dart';
+import 'package:universal_downloader/core/process/cancel_token.dart';
+import 'package:universal_downloader/providers/youtube/youtube_playlist.dart';
+import 'package:universal_downloader/ui/widgets/home_playlist_card.dart';
+import 'package:universal_downloader/ui/widgets/home_playlist_video_tile.dart';
+import 'package:universal_downloader/ui/widgets/playlist_url_dialog.dart';
+import 'package:universal_downloader/ui/widgets/home_video_settings.dart';
 import 'package:universal_downloader/core/services/dependency_checker.dart';
 import 'package:universal_downloader/core/services/log_service.dart';
 import 'package:universal_downloader/downloads/download_manager.dart';
@@ -31,6 +37,7 @@ import 'package:universal_downloader/ui/widgets/download_history_entry.dart';
 import 'package:universal_downloader/ui/pages/settings_page.dart';
 import 'package:universal_downloader/ui/widgets/format_pickers.dart';
 import 'package:universal_downloader/ui/widgets/home_video_card.dart';
+import 'package:universal_downloader/ui/widgets/home_video_folder_button.dart';
 import 'package:universal_downloader/ui/widgets/home_video_list.dart';
 import 'package:universal_downloader/ui/widgets/home_video_fetch_card.dart';
 import 'package:universal_downloader/ui/widgets/media_info_card.dart';
@@ -125,7 +132,9 @@ void main() {
   Future<void> openVideo(WidgetTester tester, String title) async {
     final edit = find.descendant(
       of: card(title),
-      matching: find.textContaining(RegExp(r'^(View settings|Selected)$')),
+      matching: find.textContaining(
+        RegExp(r'^(View settings|Editing settings)$'),
+      ),
     );
     await tester.ensureVisible(edit);
     await tester.tap(edit);
@@ -139,6 +148,779 @@ void main() {
     await tester.tap(find.widgetWithText(FilledButton, 'Fetch Info'));
     await tester.pump();
     await tester.pump(const Duration(milliseconds: 400));
+  }
+
+  Future<void> addPlaylist(WidgetTester tester) async {
+    await tester.ensureVisible(
+      find.widgetWithText(OutlinedButton, 'Add playlist'),
+    );
+    await tester.tap(find.widgetWithText(OutlinedButton, 'Add playlist'));
+    await tester.pumpAndSettle();
+    await tester.enterText(
+      find.byType(TextFormField),
+      'https://youtube.com/playlist?list=PLtest',
+    );
+    await tester.tap(find.widgetWithText(FilledButton, 'Add playlist'));
+    await tester.pump();
+    await tester.pump(const Duration(milliseconds: 400));
+  }
+
+  testWidgets(
+    'playlist selection defaults to all and queues only checked videos',
+    (tester) async {
+      await mount(tester);
+      await addPlaylist(tester);
+      final group = tester.widget<HomePlaylistCard>(
+        find.byType(HomePlaylistCard),
+      );
+      expect(group.entries.every((entry) => entry.selectedForDownload), isTrue);
+      final unchecked = group.entries.first;
+      final checked = group.entries.last;
+      final checkbox = find.descendant(
+        of: find.byType(HomePlaylistVideoTile).first,
+        matching: find.byType(Checkbox),
+      );
+      await tester.ensureVisible(checkbox);
+      await tester.tap(checkbox);
+      await tester.pump();
+      expect(unchecked.selectedForDownload, isFalse);
+      expect(find.byType(HomeVideoSettings), findsNothing);
+      expect(
+        tester.widget<CheckboxListTile>(find.byType(CheckboxListTile)).value,
+        isNull,
+      );
+      await tester.ensureVisible(find.text('Download playlist (1)'));
+      await tester.tap(find.text('Download playlist (1)'));
+      await tester.pump();
+      expect(controller.manager.tasks.map((task) => task.media.id), [
+        checked.draft!.info.id,
+      ]);
+      final remaining = tester.widget<HomePlaylistCard>(
+        find.byType(HomePlaylistCard),
+      );
+      expect(remaining.entries, [unchecked]);
+      expect(unchecked.selectedForDownload, isFalse);
+      expect(
+        tester
+            .widget<FilledButton>(
+              find.widgetWithText(FilledButton, 'Download playlist (0)'),
+            )
+            .onPressed,
+        isNull,
+      );
+    },
+  );
+
+  testWidgets('select all supports clearing restoring and independent groups', (
+    tester,
+  ) async {
+    await mount(tester);
+    await addLinks(tester, 'https://first.example/one');
+    await addPlaylist(tester);
+    final selectAll = find.descendant(
+      of: find.byType(HomePlaylistCard),
+      matching: find.byType(CheckboxListTile),
+    );
+    await tester.ensureVisible(selectAll);
+    await tester.tap(selectAll);
+    await tester.pump();
+    expect(find.text('0 of 2 selected'), findsOneWidget);
+    expect(
+      tester
+          .widget<FilledButton>(
+            find.widgetWithText(FilledButton, 'Download playlist (0)'),
+          )
+          .onPressed,
+      isNull,
+    );
+    expect(
+      tester
+          .widget<HomeVideoList>(find.byType(HomeVideoList))
+          .entries
+          .single
+          .selectedForDownload,
+      isTrue,
+    );
+    await tester.tap(selectAll);
+    await tester.pump();
+    expect(find.text('2 of 2 selected'), findsOneWidget);
+    expect(
+      tester
+          .widget<FilledButton>(
+            find.widgetWithText(FilledButton, 'Download playlist (2)'),
+          )
+          .onPressed,
+      isNotNull,
+    );
+  });
+
+  testWidgets(
+    'ordinary selection survives editing and mode switches and filters download',
+    (tester) async {
+      await mount(tester);
+      await addLinks(
+        tester,
+        'https://first.example/one https://first.example/two',
+      );
+      final entries = tester
+          .widget<HomeVideoList>(find.byType(HomeVideoList))
+          .entries;
+      expect(entries.every((entry) => entry.selectedForDownload), isTrue);
+      final checkbox = find.descendant(
+        of: card('Video one'),
+        matching: find.byType(Checkbox),
+      );
+      await tester.ensureVisible(checkbox);
+      await tester.tap(checkbox);
+      await tester.pump();
+      await openVideo(tester, 'Video one');
+      expect(entries.first.selectedForDownload, isFalse);
+      await controller.updateSettings(
+        controller.settings.copyWith(multiDownloadMode: false),
+      );
+      await tester.pump();
+      await controller.updateSettings(
+        controller.settings.copyWith(multiDownloadMode: true),
+      );
+      await tester.pump();
+      expect(entries.first.selectedForDownload, isFalse);
+      await tester.ensureVisible(find.text('Download selected (1)'));
+      await tester.tap(find.text('Download selected (1)'));
+      await tester.pump();
+      await tester.pump(const Duration(milliseconds: 400));
+      expect(controller.manager.tasks.map((task) => task.media.id), ['two']);
+      Navigator.of(tester.element(find.text('Queued videos'))).pop();
+      await tester.pumpAndSettle();
+      expect(tester.widget<HomeVideoList>(find.byType(HomeVideoList)).entries, [
+        entries.first,
+      ]);
+      expect(
+        tester
+            .widget<FilledButton>(
+              find.widgetWithText(FilledButton, 'Download selected (0)'),
+            )
+            .onPressed,
+        isNull,
+      );
+    },
+  );
+
+  testWidgets('unchecking while fetching is retained and prevents auto-start', (
+    tester,
+  ) async {
+    controller.settings = controller.settings.copyWith(autoStartDownload: true);
+    firstProvider.pendingInfo = Completer<MediaInfo>();
+    await mount(tester);
+    await addLinks(tester, 'https://first.example/one');
+    final checkbox = find.descendant(
+      of: find.byType(HomeVideoFetchCard),
+      matching: find.byType(Checkbox),
+    );
+    await tester.ensureVisible(checkbox);
+    await tester.tap(checkbox);
+    await tester.pump();
+    firstProvider.pendingInfo!.complete(
+      firstProvider.media(Uri.parse('https://first.example/one')),
+    );
+    await tester.pumpAndSettle();
+    expect(controller.manager.tasks, isEmpty);
+    expect(
+      tester
+          .widget<HomeVideoList>(find.byType(HomeVideoList))
+          .entries
+          .single
+          .selectedForDownload,
+      isFalse,
+    );
+    expect(find.text('Download selected (0)'), findsOneWidget);
+  });
+
+  testWidgets(
+    'playlist group has independent videos and queues all with their own options',
+    (tester) async {
+      await mount(tester);
+      await addLinks(tester, 'https://first.example/one');
+      await addPlaylist(tester);
+      expect(find.byType(HomePlaylistCard), findsOneWidget);
+      expect(find.text('Your videos (1)'), findsOneWidget);
+      expect(find.byType(HomePlaylistVideoTile), findsNWidgets(2));
+      expect(find.byType(FormatSelectionCard), findsNothing);
+      final playlistCard = tester.widget<HomePlaylistCard>(
+        find.byType(HomePlaylistCard),
+      );
+      final first = playlistCard.entries.first.draft!;
+      first.input.selectVideoHeight(480);
+      first.input.selectAudioLanguage('en');
+      first.input.selectSubtitle(first.info.subtitleTracks.first);
+      first.input.selectDownloadSubtitleFile(true);
+      first.input.selectContainer(ContainerPreference.mkv);
+      await tester.ensureVisible(find.text('Download playlist (2)'));
+      await tester.tap(find.text('Download playlist (2)'));
+      await tester.pump();
+      expect(controller.manager.tasks, hasLength(2));
+      expect(controller.manager.tasks.first.options.videoFormatId, 'v480');
+      expect(controller.manager.tasks.first.options.audioLanguage, 'en');
+      expect(controller.manager.tasks.first.options.subtitle?.language, 'en');
+      expect(
+        controller.manager.tasks.first.options.containerPreference,
+        ContainerPreference.mkv,
+      );
+      expect(controller.manager.tasks.last.options.videoFormatId, 'v1080');
+      expect(controller.manager.tasks.last.options.audioLanguage, 'ar');
+      expect(find.text('Your videos (1)'), findsOneWidget);
+      expect(find.textContaining('2 queued'), findsWidgets);
+    },
+  );
+
+  testWidgets(
+    'playlist folder updates every group video and queued destinations',
+    (tester) async {
+      await mount(tester);
+      await addLinks(tester, 'https://first.example/three');
+      await addPlaylist(tester);
+      final group = tester.widget<HomePlaylistCard>(
+        find.byType(HomePlaylistCard),
+      );
+      group.entries.last.selectForDownload(false);
+      final folder = find.descendant(
+        of: find.byType(HomePlaylistCard),
+        matching: find.byType(OutputFolderRow),
+      );
+      expect(tester.widget<OutputFolderRow>(folder).directory, root.path);
+      tester.widget<OutputFolderRow>(folder).onChanged('${root.path}/playlist');
+      await tester.pump();
+      expect(
+        group.entries.map((entry) => entry.draft!.input.outputDirectory),
+        everyElement('${root.path}/playlist'),
+      );
+      expect(
+        tester
+            .widget<HomeVideoList>(find.byType(HomeVideoList))
+            .entries
+            .single
+            .draft!
+            .input
+            .outputDirectory,
+        root.path,
+      );
+      expect(
+        tester.widget<OutputFolderRow>(folder).directory,
+        '${root.path}/playlist',
+      );
+      await tester.ensureVisible(find.text('Download playlist (1)'));
+      await tester.tap(find.text('Download playlist (1)'));
+      await tester.pump();
+      expect(
+        controller.manager.tasks.single.options.outputDirectory,
+        '${root.path}/playlist',
+      );
+      expect(
+        tester
+            .widget<HomePlaylistCard>(find.byType(HomePlaylistCard))
+            .entries
+            .single
+            .selectedForDownload,
+        isFalse,
+      );
+    },
+  );
+
+  testWidgets('batch folder applies to unchecked videos but not playlists', (
+    tester,
+  ) async {
+    await mount(tester);
+    await addLinks(tester, 'https://first.example/three');
+    await addPlaylist(tester);
+    final list = tester.widget<HomeVideoList>(find.byType(HomeVideoList));
+    list.entries.single.selectForDownload(false);
+    final folder = find.descendant(
+      of: find.byType(HomeVideoList),
+      matching: find.byType(OutputFolderRow),
+    );
+    const channel = MethodChannel('plugins.flutter.io/file_selector');
+    tester.binding.defaultBinaryMessenger.setMockMethodCallHandler(channel, (
+      call,
+    ) async {
+      expect(call.method, 'getDirectoryPath');
+      expect(call.arguments, containsPair('initialDirectory', root.path));
+      return '${root.path}/batch';
+    });
+    addTearDown(
+      () => tester.binding.defaultBinaryMessenger.setMockMethodCallHandler(
+        channel,
+        null,
+      ),
+    );
+    final choose = find.descendant(of: folder, matching: find.text('Choose'));
+    await tester.ensureVisible(choose);
+    await tester.tap(choose);
+    await tester.pumpAndSettle();
+    expect(
+      list.entries.single.draft!.input.outputDirectory,
+      '${root.path}/batch',
+    );
+    expect(
+      tester.widget<OutputFolderRow>(folder).directory,
+      '${root.path}/batch',
+    );
+    final group = tester.widget<HomePlaylistCard>(
+      find.byType(HomePlaylistCard),
+    );
+    expect(
+      group.entries.map((entry) => entry.draft!.input.outputDirectory),
+      everyElement(root.path),
+    );
+    list.entries.single.selectForDownload(true);
+    list.onSelectionChanged();
+    await tester.pump();
+    await tester.ensureVisible(find.text('Download all (1)'));
+    await tester.tap(find.text('Download all (1)'));
+    await tester.pump();
+    expect(
+      controller.manager.tasks.single.options.outputDirectory,
+      '${root.path}/batch',
+    );
+  });
+
+  testWidgets('batch folder is inherited by pending, retried and new videos', (
+    tester,
+  ) async {
+    firstProvider.pendingInfo = Completer<MediaInfo>();
+    firstProvider.failures.add('two');
+    await mount(tester);
+    await addLinks(
+      tester,
+      'https://first.example/one\nhttps://first.example/two',
+    );
+    final folder = find.descendant(
+      of: find.byType(HomeVideoList),
+      matching: find.byType(OutputFolderRow),
+    );
+    tester.widget<OutputFolderRow>(folder).onChanged('${root.path}/pending');
+    final pending = firstProvider.pendingInfo!;
+    firstProvider.pendingInfo = null;
+    pending.complete(
+      firstProvider.media(Uri.parse('https://first.example/one')),
+    );
+    await tester.pumpAndSettle();
+    firstProvider.failures.clear();
+    final list = tester.widget<HomeVideoList>(find.byType(HomeVideoList));
+    list.onRetry(list.entries.last);
+    await tester.pumpAndSettle();
+    await addLinks(tester, 'https://first.example/three');
+    expect(
+      tester
+          .widget<HomeVideoList>(find.byType(HomeVideoList))
+          .entries
+          .map((entry) => entry.draft!.input.outputDirectory),
+      everyElement('${root.path}/pending'),
+    );
+  });
+
+  testWidgets(
+    'card folder picker overrides one video and cancellation keeps it',
+    (tester) async {
+      await mount(tester);
+      await addLinks(
+        tester,
+        'https://first.example/one\nhttps://first.example/two',
+      );
+      final list = tester.widget<HomeVideoList>(find.byType(HomeVideoList));
+      list.onOutputDirectoryChanged('${root.path}/batch');
+      await tester.pump();
+      const channel = MethodChannel('plugins.flutter.io/file_selector');
+      String? selected = '${root.path}/individual';
+      final initialDirectories = <Object?>[];
+      tester.binding.defaultBinaryMessenger.setMockMethodCallHandler(channel, (
+        call,
+      ) async {
+        expect(call.method, 'getDirectoryPath');
+        initialDirectories.add((call.arguments as Map)['initialDirectory']);
+        return selected;
+      });
+      addTearDown(
+        () => tester.binding.defaultBinaryMessenger.setMockMethodCallHandler(
+          channel,
+          null,
+        ),
+      );
+      final picker = find.descendant(
+        of: card('Video one'),
+        matching: find.byType(HomeVideoFolderButton),
+      );
+      await tester.ensureVisible(picker);
+      await tester.tap(
+        find.descendant(of: picker, matching: find.byType(TextButton)),
+      );
+      await tester.pumpAndSettle();
+      expect(find.byType(HomeVideoSettings), findsNothing);
+      expect(list.entries.first.draft!.input.outputDirectory, selected);
+      expect(
+        list.entries.last.draft!.input.outputDirectory,
+        '${root.path}/batch',
+      );
+      expect(tester.widget<HomeVideoFolderButton>(picker).directory, selected);
+      selected = null;
+      await tester.tap(
+        find.descendant(of: picker, matching: find.byType(TextButton)),
+      );
+      await tester.pumpAndSettle();
+      expect(initialDirectories, [
+        '${root.path}/batch',
+        '${root.path}/individual',
+      ]);
+      await openVideo(tester, 'Video one');
+      expect(
+        tester
+            .widget<FormatSelectionCard>(find.byType(FormatSelectionCard))
+            .input
+            .outputDirectory,
+        '${root.path}/individual',
+      );
+      await tester.ensureVisible(find.text('Download all (2)'));
+      await tester.tap(find.text('Download all (2)'));
+      await tester.pump();
+      expect(
+        controller.manager.tasks.map((task) => task.options.outputDirectory),
+        ['${root.path}/individual', '${root.path}/batch'],
+      );
+    },
+  );
+
+  testWidgets('playlist folder chosen while fetching is used by later videos', (
+    tester,
+  ) async {
+    firstProvider.pendingInfo = Completer<MediaInfo>();
+    await mount(tester);
+    await addPlaylist(tester);
+    final folder = find.descendant(
+      of: find.byType(HomePlaylistCard),
+      matching: find.byType(OutputFolderRow),
+    );
+    tester
+        .widget<OutputFolderRow>(folder)
+        .onChanged('${root.path}/pending-playlist');
+    await tester.pump();
+    final pending = firstProvider.pendingInfo!;
+    firstProvider.pendingInfo = null;
+    pending.complete(
+      firstProvider.media(Uri.parse('https://first.example/one')),
+    );
+    await tester.pumpAndSettle();
+    final group = tester.widget<HomePlaylistCard>(
+      find.byType(HomePlaylistCard),
+    );
+    expect(group.entries, hasLength(2));
+    expect(
+      group.entries.map((entry) => entry.draft!.input.outputDirectory),
+      everyElement('${root.path}/pending-playlist'),
+    );
+    await tester.ensureVisible(find.text('Download playlist (2)'));
+    await tester.tap(find.text('Download playlist (2)'));
+    await tester.pump();
+    expect(
+      controller.manager.tasks.map((task) => task.options.outputDirectory),
+      everyElement('${root.path}/pending-playlist'),
+    );
+    expect(controller.manager.tasks, hasLength(2));
+  });
+
+  testWidgets('playlist settings editor can apply choices to its own group', (
+    tester,
+  ) async {
+    await mount(tester);
+    await addLinks(tester, 'https://first.example/three');
+    await addPlaylist(tester);
+    final tile = find.byType(HomePlaylistVideoTile).first;
+    await tester.ensureVisible(tile);
+    await tester.tap(tile);
+    await tester.pumpAndSettle();
+    final editor = tester.widget<HomeVideoSettings>(
+      find.byType(HomeVideoSettings),
+    );
+    editor.draft.input.selectVideoHeight(480);
+    editor.draft.input.selectAudioLanguage('en');
+    editor.draft.input.selectSubtitle(editor.draft.info.subtitleTracks.first);
+    editor.draft.input.selectDownloadSubtitleFile(true);
+    await tester.ensureVisible(find.text('Apply these settings to playlist'));
+    await tester.tap(find.text('Apply these settings to playlist'));
+    await tester.pump();
+    final entries = tester
+        .widget<HomePlaylistCard>(find.byType(HomePlaylistCard))
+        .entries;
+    expect(
+      entries.map((entry) => entry.draft!.input.videoHeight),
+      everyElement(480),
+    );
+    expect(
+      entries.map((entry) => entry.draft!.input.audioLanguage),
+      everyElement('en'),
+    );
+    expect(
+      entries.last.draft!.input.subtitle,
+      same(entries.last.draft!.info.subtitleTracks.first),
+    );
+    final ordinary = tester
+        .widget<HomeVideoList>(find.byType(HomeVideoList))
+        .entries
+        .single;
+    expect(ordinary.draft!.input.videoHeight, isNull);
+    expect(ordinary.draft!.input.audioLanguage, 'ar');
+  });
+
+  testWidgets(
+    'pasted playlist aliases deduplicate and never join ordinary videos',
+    (tester) async {
+      await mount(tester);
+      await addLinks(
+        tester,
+        'https://youtube.com/watch?v=abcdefghijk&list=PLtest',
+      );
+      await addLinks(
+        tester,
+        'https://youtube.com/playlist?list=PLtest&index=4',
+      );
+      expect(find.byType(HomePlaylistCard), findsOneWidget);
+      expect(find.byType(HomeVideoList), findsNothing);
+      expect(controller.playlistFetchCount, 1);
+    },
+  );
+
+  testWidgets('single mode hides playlist action and blocks playlist URLs', (
+    tester,
+  ) async {
+    controller.settings = const AppSettings();
+    await mount(tester);
+    expect(find.text('Add playlist'), findsNothing);
+    for (final url in [
+      'https://youtube.com/playlist?list=PLtest',
+      'https://youtube.com/watch?v=abcdefghijk&list=PLtest',
+    ]) {
+      await fetchSingle(tester, url);
+      expect(
+        find.text('Enable Multi-download mode in Settings to add a playlist.'),
+        findsOneWidget,
+      );
+    }
+    expect(controller.playlistFetchCount, 0);
+    expect(controller.manager.tasks, isEmpty);
+  });
+
+  for (final brightness in Brightness.values) {
+    testWidgets(
+      'video removal can be cancelled or dismissed at 375px $brightness',
+      (tester) async {
+        await mount(tester, width: 375, textScale: 1.3, brightness: brightness);
+        await addLinks(tester, 'https://first.example/one');
+        await openVideo(tester, 'Video one');
+        final input = tester
+            .widget<FormatSelectionCard>(find.byType(FormatSelectionCard))
+            .input;
+        input.selectVideoHeight(480);
+        final remove = find.byTooltip('Remove Video one');
+        await tester.ensureVisible(remove);
+        await tester.pumpAndSettle();
+        await tester.tap(remove);
+        await tester.pumpAndSettle();
+        expect(find.text('Remove video?'), findsOneWidget);
+        expect(tester.takeException(), isNull);
+        await tester.tap(find.widgetWithText(TextButton, 'Cancel'));
+        await tester.pumpAndSettle();
+        expect(card('Video one'), findsOneWidget);
+        expect(input.videoHeight, 480);
+        expect(find.byType(FormatSelectionCard), findsOneWidget);
+        await tester.tap(remove);
+        await tester.pumpAndSettle();
+        await tester.sendKeyEvent(LogicalKeyboardKey.escape);
+        await tester.pumpAndSettle();
+        expect(find.text('Remove video?'), findsNothing);
+        expect(card('Video one'), findsOneWidget);
+        await tester.tap(remove);
+        await tester.pumpAndSettle();
+        await tester.tapAt(const Offset(5, 5));
+        await tester.pumpAndSettle();
+        expect(find.text('Remove video?'), findsNothing);
+        expect(card('Video one'), findsOneWidget);
+        expect(input.videoHeight, 480);
+      },
+    );
+  }
+
+  testWidgets('playlist video and whole playlist each require confirmation', (
+    tester,
+  ) async {
+    await mount(tester);
+    await addLinks(tester, 'https://first.example/three');
+    await addPlaylist(tester);
+    final removeVideo = find.byTooltip('Remove video from playlist').first;
+    await tester.ensureVisible(removeVideo);
+    await tester.tap(removeVideo);
+    await tester.pumpAndSettle();
+    expect(find.text('Remove video?'), findsOneWidget);
+    await tester.tap(find.widgetWithText(TextButton, 'Cancel'));
+    await tester.pumpAndSettle();
+    expect(find.byType(HomePlaylistVideoTile), findsNWidgets(2));
+    await tester.tap(removeVideo);
+    await tester.pumpAndSettle();
+    await tester.tap(find.widgetWithText(FilledButton, 'Remove'));
+    await tester.pumpAndSettle();
+    final group = tester.widget<HomePlaylistCard>(
+      find.byType(HomePlaylistCard),
+    );
+    expect(group.entries.single.draft!.info.id, 'two');
+    expect(card('Video three'), findsOneWidget);
+    final removePlaylist = find.byTooltip('Remove playlist');
+    await tester.ensureVisible(removePlaylist);
+    await tester.tap(removePlaylist);
+    await tester.pumpAndSettle();
+    expect(find.text('Remove playlist?'), findsOneWidget);
+    await tester.tap(find.widgetWithText(TextButton, 'Cancel'));
+    await tester.pumpAndSettle();
+    expect(find.byType(HomePlaylistCard), findsOneWidget);
+    await tester.tap(removePlaylist);
+    await tester.pumpAndSettle();
+    await tester.tap(find.widgetWithText(FilledButton, 'Remove'));
+    await tester.pumpAndSettle();
+    expect(find.byType(HomePlaylistCard), findsNothing);
+    expect(card('Video three'), findsOneWidget);
+  });
+
+  testWidgets(
+    'metadata completion during removal dialog still removes that entry',
+    (tester) async {
+      firstProvider.pendingInfo = Completer<MediaInfo>();
+      await mount(tester);
+      await addLinks(tester, 'https://first.example/one');
+      await tester.tap(find.byTooltip('Remove https://first.example/one'));
+      await tester.pump();
+      firstProvider.pendingInfo!.complete(
+        firstProvider.media(Uri.parse('https://first.example/one')),
+      );
+      await tester.pumpAndSettle();
+      expect(find.text('Remove video?'), findsOneWidget);
+      expect(card('Video one'), findsOneWidget);
+      await tester.tap(find.widgetWithText(FilledButton, 'Remove'));
+      await tester.pumpAndSettle();
+      expect(find.byType(HomeVideoList), findsNothing);
+      expect(tester.takeException(), isNull);
+    },
+  );
+
+  testWidgets('cancel keeps a loading playlist active', (tester) async {
+    controller.pendingPlaylist = Completer<YoutubePlaylist>();
+    await mount(tester);
+    await addPlaylist(tester);
+    await tester.tap(find.byTooltip('Remove playlist'));
+    await tester.pump();
+    await tester.tap(find.widgetWithText(TextButton, 'Cancel'));
+    await tester.pump();
+    expect(controller.playlistToken!.isCancelled, isFalse);
+    controller.pendingPlaylist!.complete(controller.playlistResult);
+    await tester.pumpAndSettle();
+    expect(find.byType(HomePlaylistVideoTile), findsNWidgets(2));
+  });
+
+  testWidgets('removed loading playlist is cancelled and cannot return', (
+    tester,
+  ) async {
+    controller.pendingPlaylist = Completer<YoutubePlaylist>();
+    await mount(tester);
+    await addPlaylist(tester);
+    expect(find.text('Reading the complete playlist…'), findsOneWidget);
+    await tester.tap(find.byTooltip('Remove playlist'));
+    await tester.pump();
+    expect(controller.playlistToken!.isCancelled, isFalse);
+    expect(find.text('Remove playlist?'), findsOneWidget);
+    await tester.tap(find.widgetWithText(FilledButton, 'Remove'));
+    await tester.pumpAndSettle();
+    expect(controller.playlistToken!.isCancelled, isTrue);
+    controller.pendingPlaylist!.complete(controller.playlistResult);
+    await tester.pump();
+    expect(find.byType(HomePlaylistCard), findsNothing);
+    expect(firstProvider.fetchCount, 0);
+  });
+
+  testWidgets(
+    'playlist failure retries and failed video does not block available videos',
+    (tester) async {
+      controller.playlistFailure = true;
+      firstProvider.failures.add('two');
+      await mount(tester);
+      await addPlaylist(tester);
+      expect(find.text('Playlist unavailable.'), findsOneWidget);
+      controller.playlistFailure = false;
+      await tester.tap(find.text('Retry playlist'));
+      await tester.pump();
+      expect(find.textContaining('1 need attention'), findsOneWidget);
+      expect(find.text('Download playlist (1)'), findsOneWidget);
+      firstProvider.failures.clear();
+      await tester.ensureVisible(find.byTooltip('Retry video'));
+      await tester.tap(find.byTooltip('Retry video'));
+      await tester.pump();
+      expect(find.text('Download playlist (2)'), findsOneWidget);
+    },
+  );
+
+  testWidgets(
+    'playlists never auto-start and remain hidden when mode switches during loading',
+    (tester) async {
+      controller.settings = controller.settings.copyWith(
+        autoStartDownload: true,
+      );
+      controller.pendingPlaylist = Completer<YoutubePlaylist>();
+      await mount(tester);
+      await addPlaylist(tester);
+      await controller.updateSettings(
+        controller.settings.copyWith(multiDownloadMode: false),
+      );
+      controller.pendingPlaylist!.complete(controller.playlistResult);
+      await tester.pump();
+      expect(find.byType(HomePlaylistCard), findsNothing);
+      expect(controller.manager.tasks, isEmpty);
+      await controller.updateSettings(
+        controller.settings.copyWith(multiDownloadMode: true),
+      );
+      await tester.pump();
+      expect(find.byType(HomePlaylistCard), findsOneWidget);
+      expect(find.text('Download playlist (2)'), findsOneWidget);
+      expect(controller.manager.tasks, isEmpty);
+    },
+  );
+
+  for (final brightness in Brightness.values) {
+    for (final width in [375.0, 1162.0]) {
+      testWidgets(
+        'playlist dialog and group fit $width $brightness at large text',
+        (tester) async {
+          await mount(
+            tester,
+            width: width,
+            textScale: 1.3,
+            brightness: brightness,
+          );
+          await tester.tap(find.widgetWithText(OutlinedButton, 'Add playlist'));
+          await tester.pumpAndSettle();
+          await tester.tap(find.widgetWithText(FilledButton, 'Add playlist'));
+          await tester.pump();
+          expect(
+            find.text('Enter a YouTube playlist link containing list=.'),
+            findsOneWidget,
+          );
+          expect(tester.takeException(), isNull);
+          await tester.enterText(
+            find.byType(TextFormField),
+            'https://youtube.com/playlist?list=PLtest',
+          );
+          await tester.tap(find.widgetWithText(FilledButton, 'Add playlist'));
+          await tester.pumpAndSettle();
+          expect(find.byType(PlaylistUrlDialog), findsNothing);
+          await tester.ensureVisible(find.text('Download playlist (2)'));
+          await tester.pump();
+          expect(tester.takeException(), isNull);
+          expect(find.byType(HomePlaylistVideoTile), findsNWidgets(2));
+        },
+      );
+    }
   }
 
   test(
@@ -560,7 +1342,14 @@ void main() {
       lessThan(tester.getTopLeft(find.byType(FormatSelectionCard)).dy),
     );
     expect(
-      tester.getTopLeft(find.byType(OutputFolderRow)).dy,
+      tester
+          .getTopLeft(
+            find.descendant(
+              of: find.byType(HomeVideoSettings),
+              matching: find.byType(OutputFolderRow),
+            ),
+          )
+          .dy,
       lessThan(tester.getTopLeft(find.byType(HomeVideoList)).dy),
     );
     await addLinks(tester, 'https://first.example/two');
@@ -673,7 +1462,12 @@ void main() {
     first.input.selectSubtitle(first.info.subtitleTracks.single);
     first.input.selectDownloadSubtitleFile(true);
     first.onChanged();
-    final folder = tester.widget<OutputFolderRow>(find.byType(OutputFolderRow));
+    final folder = tester.widget<OutputFolderRow>(
+      find.descendant(
+        of: find.byType(HomeVideoSettings),
+        matching: find.byType(OutputFolderRow),
+      ),
+    );
     folder.onChanged('${root.path}/custom');
     await tester.pump();
     await tester.pump(const Duration(milliseconds: 400));
@@ -764,6 +1558,10 @@ void main() {
     await openVideo(tester, 'Video one');
     await tester.ensureVisible(find.byTooltip('Remove Video one'));
     await tester.tap(find.byTooltip('Remove Video one'));
+    await tester.pumpAndSettle();
+    expect(find.text('Your videos (3)'), findsOneWidget);
+    expect(find.byType(FormatSelectionCard), findsOneWidget);
+    await tester.tap(find.widgetWithText(FilledButton, 'Remove'));
     await tester.pump();
     await tester.pump(const Duration(milliseconds: 400));
     expect(find.byType(FormatSelectionCard), findsNothing);
@@ -779,8 +1577,15 @@ void main() {
     await tester.pump(const Duration(milliseconds: 400));
     expect(find.text('Your videos (1)'), findsOneWidget);
     expect(card('Video three'), findsOneWidget);
-    await tester.ensureVisible(find.byTooltip('Remove Video three'));
-    await tester.tap(find.byTooltip('Remove Video three'));
+    final removeRemaining = find.descendant(
+      of: card('Video three'),
+      matching: find.byType(IconButton),
+    );
+    await tester.ensureVisible(removeRemaining);
+    await tester.pumpAndSettle();
+    await tester.tap(removeRemaining);
+    await tester.pumpAndSettle();
+    await tester.tap(find.widgetWithText(FilledButton, 'Remove'));
     await tester.pump();
     await tester.pump(const Duration(milliseconds: 400));
     expect(find.byType(HomeVideoList), findsNothing);
@@ -899,6 +1704,10 @@ void main() {
     expect(find.byType(MediaInfoCard), findsNothing);
     await tester.tap(find.byTooltip('Remove https://first.example/one'));
     await tester.pump();
+    expect(find.text('Remove video?'), findsOneWidget);
+    expect(find.byType(HomeVideoFetchCard), findsOneWidget);
+    await tester.tap(find.widgetWithText(FilledButton, 'Remove'));
+    await tester.pump();
     firstProvider.pendingInfo!.complete(
       firstProvider.media(Uri.parse('https://first.example/one')),
     );
@@ -967,7 +1776,12 @@ void main() {
         );
         expect(tester.takeException(), isNull);
         await openVideo(tester, 'Video one');
-        await tester.ensureVisible(find.byType(OutputFolderRow));
+        await tester.ensureVisible(
+          find.descendant(
+            of: find.byType(HomeVideoSettings),
+            matching: find.byType(OutputFolderRow),
+          ),
+        );
         await tester.pump();
         await tester.pump(const Duration(milliseconds: 400));
         expect(tester.takeException(), isNull);
@@ -1056,6 +1870,28 @@ class BatchController extends Fake implements AppController {
   }
 
   final Directory root;
+  int playlistFetchCount = 0;
+  bool playlistFailure = false;
+  Completer<YoutubePlaylist>? pendingPlaylist;
+  CancelToken? playlistToken;
+  final playlistResult = YoutubePlaylist(
+    title: 'My learning playlist',
+    videoUrls: [
+      Uri.parse('https://first.example/one'),
+      Uri.parse('https://first.example/two'),
+    ],
+  );
+  @override
+  Future<YoutubePlaylist> fetchYoutubePlaylist(
+    Uri url, {
+    CancelToken? cancelToken,
+  }) async {
+    playlistFetchCount++;
+    playlistToken = cancelToken;
+    if (playlistFailure) throw NetworkException('Playlist unavailable.');
+    return pendingPlaylist?.future ?? playlistResult;
+  }
+
   @override
   AppSettings settings = const AppSettings(multiDownloadMode: true);
   @override

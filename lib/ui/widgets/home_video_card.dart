@@ -1,17 +1,25 @@
 import 'package:flutter/material.dart';
 
 import '../pages/home_video_draft.dart';
+import '../pages/home_video_entry.dart';
+import 'home_download_checkbox.dart';
+import 'home_video_folder_button.dart';
 
 class HomeVideoCard extends StatelessWidget {
   const HomeVideoCard({
     super.key,
-    required this.draft,
+    required this.entry,
+    required this.onOutputDirectoryChanged,
+    required this.onSelectionChanged,
     required this.selected,
     required this.onSelect,
     required this.onRemove,
   });
 
-  final HomeVideoDraft draft;
+  final HomeVideoEntry entry;
+  final ValueChanged<String> onOutputDirectoryChanged;
+  HomeVideoDraft get draft => entry.draft!;
+  final VoidCallback onSelectionChanged;
   final bool selected;
   final VoidCallback onSelect;
   final VoidCallback onRemove;
@@ -48,6 +56,10 @@ class HomeVideoCard extends StatelessWidget {
                       style: theme.textTheme.titleSmall,
                     ),
                   ),
+                ),
+                HomeDownloadCheckbox(
+                  entry: entry,
+                  onChanged: onSelectionChanged,
                 ),
                 IconButton(
                   tooltip: 'Remove ${draft.info.title}',
@@ -96,7 +108,7 @@ class HomeVideoCard extends StatelessWidget {
                       children: [
                         Expanded(
                           child: Text(
-                            selected ? 'Selected' : 'View settings',
+                            selected ? 'Editing settings' : 'View settings',
                             style: theme.textTheme.bodySmall,
                           ),
                         ),
@@ -115,6 +127,14 @@ class HomeVideoCard extends StatelessWidget {
               ),
             ),
           ),
+          if (theme.platform != TargetPlatform.android)
+            Padding(
+              padding: const EdgeInsets.fromLTRB(8, 0, 8, 8),
+              child: HomeVideoFolderButton(
+                directory: draft.input.outputDirectory,
+                onChanged: onOutputDirectoryChanged,
+              ),
+            ),
         ],
       ),
     );

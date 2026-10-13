@@ -1,16 +1,19 @@
 import 'package:flutter/material.dart';
 
 import '../pages/home_video_entry.dart';
+import 'home_download_checkbox.dart';
 
 class HomeVideoFetchCard extends StatelessWidget {
   const HomeVideoFetchCard({
     super.key,
     required this.entry,
+    required this.onSelectionChanged,
     required this.onRemove,
     required this.onRetry,
   });
 
   final HomeVideoEntry entry;
+  final VoidCallback onSelectionChanged;
   final VoidCallback onRemove;
   final VoidCallback onRetry;
 
@@ -31,6 +34,10 @@ class HomeVideoFetchCard extends StatelessWidget {
                     maxLines: 2,
                     overflow: TextOverflow.ellipsis,
                   ),
+                ),
+                HomeDownloadCheckbox(
+                  entry: entry,
+                  onChanged: onSelectionChanged,
                 ),
                 IconButton(
                   tooltip: 'Remove ${entry.link}',

@@ -12,19 +12,21 @@ class HomeVideoSettings extends StatelessWidget {
     required this.preferredLanguage,
     required this.onChanged,
     required this.onDownload,
+    this.onClearSelection,
   });
 
   final HomeVideoDraft draft;
   final String preferredLanguage;
   final VoidCallback onChanged;
   final VoidCallback? onDownload;
+  final VoidCallback? onClearSelection;
 
   @override
   Widget build(BuildContext context) {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
-        MediaInfoCard(info: draft.info),
+        MediaInfoCard(info: draft.info, onClearSelection: onClearSelection),
         const SizedBox(height: 12),
         FormatSelectionCard(
           info: draft.info,

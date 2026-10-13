@@ -7,10 +7,12 @@ class OutputFolderRow extends StatelessWidget {
     super.key,
     required this.directory,
     required this.onChanged,
+    this.label = 'Output Folder',
   });
 
   final String directory;
   final ValueChanged<String> onChanged;
+  final String label;
 
   Future<void> _pick(BuildContext context) async {
     final selected = await getDirectoryPath(
@@ -46,7 +48,7 @@ class OutputFolderRow extends StatelessWidget {
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  Text('Output Folder', style: theme.textTheme.titleMedium),
+                  Text(label, style: theme.textTheme.titleMedium),
                   const SizedBox(height: 4),
                   Text(
                     directory.isEmpty ? 'Not selected' : directory,

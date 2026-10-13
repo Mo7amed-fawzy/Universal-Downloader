@@ -4,6 +4,9 @@ import 'dart:convert';
 import 'package:flutter/material.dart';
 
 import '../core/models/media_info.dart';
+import '../core/process/cancel_token.dart';
+import '../providers/youtube/youtube_playlist.dart';
+import '../providers/youtube/youtube_provider.dart';
 import '../core/storage/app_database.dart';
 import '../core/services/dependency_checker.dart';
 import '../core/services/log_service.dart';
@@ -123,6 +126,20 @@ class AppController extends ChangeNotifier {
       url,
       configuration: jsonEncode([tools.ytDlp, tools.ytDlpArguments]),
     );
+  }
+
+  Future<YoutubePlaylist> fetchYoutubePlaylist(
+    Uri url, {
+    CancelToken? cancelToken,
+  }) {
+    if (!settings.multiDownloadMode) {
+      throw StateError('Enable Multi-download mode to add a playlist.');
+    }
+    final provider = registry.resolve(url);
+    if (provider is! YoutubeProvider) {
+      throw const FormatException('Enter a valid YouTube playlist link.');
+    }
+    return provider.fetchPlaylist(url, cancelToken: cancelToken);
   }
 
   Future<void> clearLinkCache() async {

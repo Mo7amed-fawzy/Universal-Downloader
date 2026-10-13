@@ -24,6 +24,7 @@ import '../tool_configurable_provider.dart';
 import 'youtube_cover_downloader.dart';
 import 'youtube_extractor.dart';
 import 'youtube_format_mapper.dart';
+import 'youtube_playlist.dart';
 import 'youtube_subtitle_downloader.dart';
 
 /// YouTube provider backed by yt-dlp.
@@ -91,6 +92,13 @@ class YoutubeProvider implements DownloaderProvider, ToolConfigurableProvider {
   );
 
   static const _progressParser = YtDlpProgressParser();
+
+  Future<YoutubePlaylist> fetchPlaylist(Uri url, {CancelToken? cancelToken}) =>
+      YoutubeExtractor(
+        ytDlpPath: ytDlpPath,
+        runner: _runner,
+        extraArgs: _extraArgList,
+      ).extractPlaylist(url, cancelToken: cancelToken);
 
   @override
   bool canHandle(Uri url) {

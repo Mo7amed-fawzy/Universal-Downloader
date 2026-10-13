@@ -19,6 +19,7 @@ class UrlInputCard extends StatelessWidget {
     this.statusMessage,
     this.previousDownloadCount = 0,
     this.onViewDownloads,
+    this.onAddPlaylist,
   });
 
   final TextEditingController controller;
@@ -32,6 +33,7 @@ class UrlInputCard extends StatelessWidget {
   final String? statusMessage;
   final int previousDownloadCount;
   final VoidCallback? onViewDownloads;
+  final VoidCallback? onAddPlaylist;
 
   @override
   Widget build(BuildContext context) {
@@ -126,6 +128,14 @@ class UrlInputCard extends StatelessWidget {
               },
             ),
             const SizedBox(height: 12),
+            if (multiDownloadMode && onAddPlaylist != null) ...[
+              OutlinedButton.icon(
+                onPressed: enabled ? onAddPlaylist : null,
+                icon: const Icon(Icons.playlist_add),
+                label: const Text('Add playlist'),
+              ),
+              const SizedBox(height: 12),
+            ],
             if (statusMessage != null) ...[
               Semantics(
                 liveRegion: true,
