@@ -4,6 +4,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:provider/provider.dart';
 import 'package:universal_downloader/app/app_controller.dart';
+import 'package:universal_downloader/app/theme/app_theme.dart';
 import 'package:universal_downloader/app/routes.dart';
 import 'package:universal_downloader/core/errors/downloader_exceptions.dart';
 import 'package:universal_downloader/core/models/download_options.dart';
@@ -66,7 +67,9 @@ void main() {
         ChangeNotifierProvider<AppController>.value(
           value: QueueTestController(manager),
           child: MaterialApp(
-            theme: ThemeData(brightness: brightness),
+            theme: (brightness == Brightness.dark
+                ? AppTheme.dark()
+                : AppTheme.light()),
             builder: (context, child) => MediaQuery(
               data: MediaQuery.of(
                 context,
@@ -199,7 +202,7 @@ void main() {
           ChangeNotifierProvider<AppController>.value(
             value: QueueTestController(manager),
             child: MaterialApp(
-              theme: ThemeData(platform: TargetPlatform.linux),
+              theme: AppTheme.light().copyWith(platform: TargetPlatform.linux),
               builder: (context, child) => MediaQuery(
                 data: MediaQuery.of(context).copyWith(
                   disableAnimations: reducedMotion,

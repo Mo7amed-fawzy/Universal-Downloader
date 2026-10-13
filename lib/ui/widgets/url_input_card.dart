@@ -39,6 +39,12 @@ class UrlInputCard extends StatelessWidget {
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
     return Card(
+      shape: RoundedRectangleBorder(
+        borderRadius: BorderRadius.circular(24),
+        side: BorderSide(
+          color: theme.colorScheme.primary.withValues(alpha: 0.4),
+        ),
+      ),
       child: Padding(
         padding: const EdgeInsets.all(16),
         child: Column(
@@ -66,7 +72,7 @@ class UrlInputCard extends StatelessWidget {
                           if (enabled && !fetching) onFetch();
                         },
                   decoration: InputDecoration(
-                    labelText: multiDownloadMode ? 'Video links' : null,
+                    labelText: multiDownloadMode ? 'Video links' : 'Video link',
                     hintText: multiDownloadMode
                         ? 'Paste one link per line'
                         : 'https://www.youtube.com/watch?v=...',
@@ -146,7 +152,11 @@ class UrlInputCard extends StatelessWidget {
             if (provider != null && errorMessage == null)
               Row(
                 children: [
-                  Icon(Icons.check_circle, size: 18, color: Colors.green),
+                  Icon(
+                    Icons.check_circle,
+                    size: 18,
+                    color: theme.colorScheme.secondary,
+                  ),
                   const SizedBox(width: 8),
                   Expanded(
                     child: Text(

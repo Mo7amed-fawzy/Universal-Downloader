@@ -7,6 +7,7 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:provider/provider.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:universal_downloader/app/app_controller.dart';
+import 'package:universal_downloader/app/theme/app_theme.dart';
 import 'package:universal_downloader/app/routes.dart';
 import 'package:universal_downloader/core/errors/downloader_exceptions.dart';
 import 'package:universal_downloader/core/models/audio_format.dart';
@@ -91,10 +92,11 @@ void main() {
       ChangeNotifierProvider<AppController>.value(
         value: controller,
         child: MaterialApp(
-          theme: ThemeData(
-            platform: TargetPlatform.linux,
-            brightness: brightness,
-          ),
+          theme:
+              (brightness == Brightness.dark
+                      ? AppTheme.dark()
+                      : AppTheme.light())
+                  .copyWith(platform: TargetPlatform.linux),
           builder: (context, child) => MediaQuery(
             data: MediaQuery.of(context).copyWith(
               textScaler: TextScaler.linear(textScale),
@@ -121,6 +123,9 @@ void main() {
     final field = find.byType(TextField);
     await tester.ensureVisible(field);
     await tester.enterText(field, links);
+    await tester.pump();
+    await tester.ensureVisible(find.widgetWithText(FilledButton, 'Add videos'));
+    await tester.pump(const Duration(milliseconds: 400));
     await tester.tap(find.widgetWithText(FilledButton, 'Add videos'));
     await tester.pump();
     await tester.pump(const Duration(milliseconds: 400));
@@ -137,6 +142,7 @@ void main() {
       ),
     );
     await tester.ensureVisible(edit);
+    await tester.pump(const Duration(milliseconds: 400));
     await tester.tap(edit);
     await tester.pump();
     await tester.pump(const Duration(milliseconds: 400));
@@ -917,7 +923,26 @@ void main() {
           await tester.ensureVisible(find.text('Download playlist (2)'));
           await tester.pump();
           expect(tester.takeException(), isNull);
-          expect(find.byType(HomePlaylistVideoTile), findsNWidgets(2));
+          expect(
+            tester
+                .widget<HomePlaylistCard>(find.byType(HomePlaylistCard))
+                .entries,
+            hasLength(2),
+          );
+          final playlistScroll = find.descendant(
+            of: find.byType(HomePlaylistCard),
+            matching: find.byType(Scrollable),
+          );
+          await tester.ensureVisible(playlistScroll);
+          await tester.pumpAndSettle();
+          await tester.scrollUntilVisible(
+            find.text('2. Video two'),
+            120,
+            scrollable: playlistScroll,
+          );
+          await tester.pumpAndSettle();
+          expect(find.text('2. Video two'), findsOneWidget);
+          expect(tester.takeException(), isNull);
         },
       );
     }

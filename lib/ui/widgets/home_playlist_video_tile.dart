@@ -33,7 +33,8 @@ class HomePlaylistVideoTile extends StatelessWidget {
       clipBehavior: Clip.hardEdge,
       child: ListTile(
         selected: selected,
-        selectedTileColor: Theme.of(context).colorScheme.secondaryContainer,
+        selectedTileColor: Theme.of(context).colorScheme.primaryContainer,
+        selectedColor: Theme.of(context).colorScheme.onPrimaryContainer,
         contentPadding: const EdgeInsets.symmetric(horizontal: 8),
         leading: HomeVideoThumbnail(url: draft?.info.thumbnail),
         title: Text(

@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:provider/provider.dart';
 import 'package:universal_downloader/app/app_controller.dart';
+import 'package:universal_downloader/app/theme/app_theme.dart';
 import 'package:universal_downloader/core/models/audio_format.dart';
 import 'package:universal_downloader/core/models/media_info.dart';
 import 'package:universal_downloader/core/models/video_format.dart';
@@ -40,7 +41,7 @@ void main() {
         ChangeNotifierProvider<AppController>.value(
           value: LayoutController(),
           child: MaterialApp(
-            theme: ThemeData(platform: TargetPlatform.android),
+            theme: AppTheme.light().copyWith(platform: TargetPlatform.android),
             home: AppScaffold(
               selectedIndex: 0,
               body: SingleChildScrollView(

@@ -31,29 +31,35 @@ class AppScaffold extends StatelessWidget {
           ? SafeArea(child: body)
           : Row(
               children: [
-                NavigationRail(
-                  selectedIndex: selectedIndex,
-                  labelType: NavigationRailLabelType.all,
-                  destinations: const [
-                    NavigationRailDestination(
-                      icon: Icon(Icons.home_outlined),
-                      selectedIcon: Icon(Icons.home),
-                      label: Text('Home'),
+                Padding(
+                  padding: const EdgeInsets.fromLTRB(12, 8, 0, 16),
+                  child: ClipRRect(
+                    borderRadius: BorderRadius.circular(24),
+                    child: NavigationRail(
+                      selectedIndex: selectedIndex,
+                      labelType: NavigationRailLabelType.all,
+                      destinations: const [
+                        NavigationRailDestination(
+                          icon: Icon(Icons.home_outlined),
+                          selectedIcon: Icon(Icons.home),
+                          label: Text('Home'),
+                        ),
+                        NavigationRailDestination(
+                          icon: Icon(Icons.download_outlined),
+                          selectedIcon: Icon(Icons.download),
+                          label: Text('Downloads'),
+                        ),
+                        NavigationRailDestination(
+                          icon: Icon(Icons.settings_outlined),
+                          selectedIcon: Icon(Icons.settings),
+                          label: Text('Settings'),
+                        ),
+                      ],
+                      onDestinationSelected: (index) =>
+                          _navigate(context, index),
                     ),
-                    NavigationRailDestination(
-                      icon: Icon(Icons.download_outlined),
-                      selectedIcon: Icon(Icons.download),
-                      label: Text('Downloads'),
-                    ),
-                    NavigationRailDestination(
-                      icon: Icon(Icons.settings_outlined),
-                      selectedIcon: Icon(Icons.settings),
-                      label: Text('Settings'),
-                    ),
-                  ],
-                  onDestinationSelected: (index) => _navigate(context, index),
+                  ),
                 ),
-                const VerticalDivider(width: 1),
                 Expanded(child: body),
               ],
             ),

@@ -6,6 +6,7 @@ import '../widgets/app_scaffold.dart';
 import '../widgets/download_history_confirmation_dialog.dart';
 import '../widgets/download_history_list.dart';
 import '../widgets/downloads_header.dart';
+import '../widgets/downloads_empty_state.dart';
 
 /// Full download queue with per-task state, progress and actions.
 class DownloadsPage extends StatelessWidget {
@@ -24,7 +25,7 @@ class DownloadsPage extends StatelessWidget {
         return AppScaffold(
           selectedIndex: 1,
           body: tasks.isEmpty
-              ? const _EmptyState()
+              ? const DownloadsEmptyState()
               : Column(
                   children: [
                     Padding(
@@ -65,33 +66,5 @@ class DownloadsPage extends StatelessWidget {
     for (final id in terminal) {
       await controller.manager.remove(id);
     }
-  }
-}
-
-class _EmptyState extends StatelessWidget {
-  const _EmptyState();
-
-  @override
-  Widget build(BuildContext context) {
-    final theme = Theme.of(context);
-    return Center(
-      child: Column(
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          Icon(
-            Icons.download_for_offline_outlined,
-            size: 64,
-            color: theme.colorScheme.outline,
-          ),
-          const SizedBox(height: 12),
-          Text('No downloads yet', style: theme.textTheme.titleLarge),
-          const SizedBox(height: 4),
-          Text(
-            'Paste a URL on the Home page to get started.',
-            style: theme.textTheme.bodyMedium,
-          ),
-        ],
-      ),
-    );
   }
 }

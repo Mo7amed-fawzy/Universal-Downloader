@@ -20,6 +20,7 @@ import '../widgets/dependency_banner.dart';
 import '../widgets/download_tile.dart';
 import '../widgets/error_dialog.dart';
 import '../widgets/home_video_list.dart';
+import '../widgets/home_intro.dart';
 import '../widgets/home_video_settings.dart';
 import '../widgets/home_playlist_card.dart';
 import '../widgets/home_remove_confirmation_dialog.dart';
@@ -780,6 +781,7 @@ class _HomePageState extends State<HomePage> {
                     child: Column(
                       crossAxisAlignment: CrossAxisAlignment.stretch,
                       children: [
+                        const HomeIntro(),
                         const DependencyBanner(),
                         if (isDragging) ...[
                           const SizedBox(height: 8),

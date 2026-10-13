@@ -18,7 +18,7 @@ void main() {
       MaterialApp(
         theme: ThemeData(
           colorScheme: const ColorScheme.light(
-            secondaryContainer: Color(0xFF334455),
+            primaryContainer: Color(0xFF334455),
           ),
         ),
         home: RepaintBoundary(

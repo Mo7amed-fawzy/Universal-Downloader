@@ -28,10 +28,12 @@ class DownloadCompletedStatus extends StatelessWidget {
           children: [
             const Icon(Icons.check_circle, size: 18, color: Colors.green),
             const SizedBox(width: 8),
-            Text(
-              'Completed',
-              style: theme.textTheme.bodyMedium?.copyWith(
-                fontWeight: FontWeight.w600,
+            Expanded(
+              child: Text(
+                'Completed',
+                style: theme.textTheme.bodyMedium?.copyWith(
+                  fontWeight: FontWeight.w600,
+                ),
               ),
             ),
           ],
