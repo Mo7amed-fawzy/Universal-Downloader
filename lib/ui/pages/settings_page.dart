@@ -8,6 +8,7 @@ import '../../core/models/download_options.dart';
 import '../../providers/format_selector.dart';
 import '../../settings/app_settings.dart';
 import '../widgets/app_scaffold.dart';
+import '../widgets/app_tab_scope.dart';
 import '../widgets/advanced_settings_section.dart';
 import '../widgets/tool_diagnostics.dart';
 import '../widgets/link_cache_settings_card.dart';
@@ -29,6 +30,7 @@ class _SettingsPageState extends State<SettingsPage> {
   late final TextEditingController _ffmpegPathController;
   late final TextEditingController _ffprobePathController;
   late final TextEditingController _extraArgsController;
+  bool _wasActive = false;
 
   @override
   void initState() {
@@ -47,6 +49,28 @@ class _SettingsPageState extends State<SettingsPage> {
     _ffmpegPathController = TextEditingController(text: _draft.ffmpegPath);
     _ffprobePathController = TextEditingController(text: _draft.ffprobePath);
     _extraArgsController = TextEditingController(text: _draft.extraYtDlpArgs);
+  }
+
+  @override
+  void didChangeDependencies() {
+    super.didChangeDependencies();
+    final tabs = context.dependOnInheritedWidgetOfExactType<AppTabScope>();
+    final active = tabs == null || tabs.selectedIndex == 2;
+    if (active && !_wasActive) {
+      _draft = context.read<AppController>().settings;
+      for (final (controller, value) in [
+        (_dirController, _draft.defaultDownloadDirectory),
+        (_preferredLangController, _draft.preferredLanguage),
+        (_fallbackLangController, _draft.fallbackLanguage),
+        (_ytDlpPathController, _draft.ytDlpPath),
+        (_ffmpegPathController, _draft.ffmpegPath),
+        (_ffprobePathController, _draft.ffprobePath),
+        (_extraArgsController, _draft.extraYtDlpArgs),
+      ]) {
+        if (controller.text != value) controller.text = value;
+      }
+    }
+    _wasActive = active;
   }
 
   @override
@@ -179,6 +203,8 @@ class _SettingsPageState extends State<SettingsPage> {
             title: 'Video',
             children: [
               DropdownButtonFormField<VideoQuality>(
+                isExpanded: true,
+                key: ValueKey(_draft.defaultVideoQuality),
                 initialValue: _draft.defaultVideoQuality,
                 decoration: const InputDecoration(labelText: 'Default quality'),
                 items: VideoQuality.values
@@ -201,6 +227,8 @@ class _SettingsPageState extends State<SettingsPage> {
               ),
               const SizedBox(height: 12),
               DropdownButtonFormField<ContainerPreference>(
+                isExpanded: true,
+                key: ValueKey(_draft.containerPreference),
                 initialValue: _draft.containerPreference,
                 decoration: const InputDecoration(
                   labelText: 'Container preference',

@@ -2,7 +2,7 @@ import 'package:flutter/material.dart';
 
 import '../ui/pages/downloads_page.dart';
 import '../ui/pages/downloads_navigation.dart';
-import '../ui/pages/home_page.dart';
+import '../ui/pages/app_tabs.dart';
 import '../ui/pages/settings_page.dart';
 
 /// Named routes for the application.
@@ -17,7 +17,7 @@ Route<dynamic>? generateRoute(RouteSettings settings) {
     case AppRoutes.home:
       return MaterialPageRoute<void>(
         settings: settings,
-        builder: (_) => const HomePage(),
+        builder: (_) => const AppTabs(),
       );
     case AppRoutes.downloads:
       final target = settings.arguments;

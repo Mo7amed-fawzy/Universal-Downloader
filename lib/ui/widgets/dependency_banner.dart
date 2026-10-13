@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 
 import '../../app/app_controller.dart';
+import 'app_tab_scope.dart';
 
 /// Warns when external dependencies (yt-dlp / ffmpeg / ffprobe) are missing.
 class DependencyBanner extends StatelessWidget {
@@ -10,12 +11,9 @@ class DependencyBanner extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final controller = context.watch<AppController>();
-    final missing = controller.dependencies
-        .where((d) => !d.installed)
-        .toList();
+    final missing = controller.dependencies.where((d) => !d.installed).toList();
 
     if (missing.isEmpty) return const SizedBox.shrink();
-
 
     return Card(
       color: Theme.of(context).colorScheme.errorContainer,
@@ -32,17 +30,14 @@ class DependencyBanner extends StatelessWidget {
               child: Text(
                 'Download components are unavailable. Open Settings → '
                 'Advanced → Diagnostics to restore the included tools.',
-                style: Theme.of(context)
-                    .textTheme
-                    .bodyMedium
-                    ?.copyWith(
-                      color: Theme.of(context).colorScheme.onErrorContainer,
-                    ),
+                style: Theme.of(context).textTheme.bodyMedium?.copyWith(
+                  color: Theme.of(context).colorScheme.onErrorContainer,
+                ),
               ),
             ),
             TextButton(
               onPressed: () {
-                Navigator.of(context).pushNamed('/settings');
+                AppTabScope.of(context).onSelected(2);
               },
               child: const Text('Settings'),
             ),

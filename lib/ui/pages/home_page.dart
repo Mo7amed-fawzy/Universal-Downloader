@@ -5,7 +5,7 @@ import 'package:flutter/services.dart';
 import 'package:provider/provider.dart';
 
 import '../../app/app_controller.dart';
-import '../../app/routes.dart';
+import '../widgets/app_tab_scope.dart';
 import '../../core/errors/downloader_exceptions.dart';
 import '../../core/models/audio_format.dart';
 import '../../core/models/download_options.dart';
@@ -30,7 +30,6 @@ import '../widgets/app_scaffold.dart';
 import 'home_video_draft.dart';
 import 'home_video_entry.dart';
 import 'home_playlist_entry.dart';
-import 'downloads_navigation.dart';
 
 /// Main screen: URLs → prepare videos → choose individual formats → download.
 class HomePage extends StatefulWidget {
@@ -259,12 +258,9 @@ class _HomePageState extends State<HomePage> {
               .map(Uri.tryParse)
               .whereType<Uri>(),
         );
-    Navigator.of(context).pushNamed(
-      AppRoutes.downloads,
-      arguments: matches.isEmpty
-          ? null
-          : DownloadsNavigation(taskId: matches.first.id),
-    );
+    AppTabScope.of(
+      context,
+    ).onSelected(1, taskId: matches.isEmpty ? null : matches.first.id);
   }
 
   Future<void> _fetchInfo() async {
@@ -390,7 +386,7 @@ class _HomePageState extends State<HomePage> {
           controller.log.error('Could not remember output directory: $error');
         }),
       );
-      Navigator.of(context).pushNamed(AppRoutes.downloads);
+      AppTabScope.of(context).onSelected(1);
     } catch (error) {
       await showErrorDialog(
         context,
@@ -600,7 +596,7 @@ class _HomePageState extends State<HomePage> {
       );
     }
     if (failed.isEmpty && navigate) {
-      Navigator.of(context).pushNamed(AppRoutes.downloads);
+      AppTabScope.of(context).onSelected(1);
     } else {
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(

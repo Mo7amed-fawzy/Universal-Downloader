@@ -10,9 +10,10 @@ import '../widgets/downloads_empty_state.dart';
 
 /// Full download queue with per-task state, progress and actions.
 class DownloadsPage extends StatelessWidget {
-  const DownloadsPage({super.key, this.initialTaskId});
+  const DownloadsPage({super.key, this.initialTaskId, this.revealRequest = 0});
 
   final String? initialTaskId;
+  final int revealRequest;
 
   @override
   Widget build(BuildContext context) {
@@ -39,6 +40,7 @@ class DownloadsPage extends StatelessWidget {
                     ),
                     Expanded(
                       child: DownloadHistoryList(
+                        key: ValueKey(revealRequest),
                         tasks: tasks,
                         initialTaskId: initialTaskId,
                       ),

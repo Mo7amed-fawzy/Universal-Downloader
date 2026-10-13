@@ -32,8 +32,9 @@ import 'package:universal_downloader/providers/provider_registry.dart';
 import 'package:universal_downloader/providers/youtube/youtube_provider.dart';
 import 'package:universal_downloader/settings/app_settings.dart';
 import 'package:universal_downloader/settings/settings_service.dart';
-import 'package:universal_downloader/ui/pages/home_page.dart';
-import 'package:universal_downloader/ui/pages/downloads_navigation.dart';
+import 'package:universal_downloader/ui/pages/app_tabs.dart';
+import 'package:universal_downloader/ui/pages/downloads_page.dart';
+import 'package:universal_downloader/ui/widgets/app_tab_scope.dart';
 import 'package:universal_downloader/ui/widgets/download_history_entry.dart';
 import 'package:universal_downloader/ui/pages/settings_page.dart';
 import 'package:universal_downloader/ui/widgets/format_pickers.dart';
@@ -82,7 +83,6 @@ void main() {
     double height = 900,
     double textScale = 1,
     Brightness brightness = Brightness.light,
-    bool realDownloads = false,
   }) async {
     tester.view.physicalSize = Size(width, height);
     tester.view.devicePixelRatio = 1;
@@ -104,14 +104,8 @@ void main() {
             ),
             child: child!,
           ),
-          home: const HomePage(),
+          home: const AppTabs(),
           onGenerateRoute: generateRoute,
-          routes: {
-            AppRoutes.settings: (_) => const SettingsPage(),
-            if (!realDownloads)
-              AppRoutes.downloads: (_) =>
-                  const Scaffold(body: Text('Queued videos')),
-          },
         ),
       ),
     );
@@ -295,7 +289,7 @@ void main() {
       await tester.pump();
       await tester.pump(const Duration(milliseconds: 400));
       expect(controller.manager.tasks.map((task) => task.media.id), ['two']);
-      Navigator.of(tester.element(find.text('Queued videos'))).pop();
+      AppTabScope.of(tester.element(find.byType(DownloadsPage))).onSelected(0);
       await tester.pumpAndSettle();
       expect(tester.widget<HomeVideoList>(find.byType(HomeVideoList)).entries, [
         entries.first,
@@ -1019,16 +1013,16 @@ void main() {
         await tester.ensureVisible(find.byType(DownloadedVideoWarning));
         await tester.tap(find.byType(DownloadedVideoWarning));
         await tester.pumpAndSettle();
-        expect(find.text('Queued videos'), findsOneWidget);
+        expect(find.byType(DownloadsPage), findsOneWidget);
         expect(
-          (ModalRoute.of(
-                    tester.element(find.text('Queued videos')),
-                  )!.settings.arguments
-                  as DownloadsNavigation)
-              .taskId,
+          tester
+              .widget<DownloadsPage>(find.byType(DownloadsPage))
+              .initialTaskId,
           'finished',
         );
-        Navigator.of(tester.element(find.text('Queued videos'))).pop();
+        AppTabScope.of(
+          tester.element(find.byType(DownloadsPage)),
+        ).onSelected(0);
         await tester.pumpAndSettle();
         await tester.ensureVisible(find.byType(TextField));
         await tester.enterText(
@@ -1090,7 +1084,7 @@ void main() {
       if (index == 80) task.markCompleted('/missing/latest.mkv');
       controller.manager.queue.add(task);
     }
-    await mount(tester, realDownloads: true);
+    await mount(tester);
     await tester.enterText(
       find.byType(TextField),
       'https://youtube.com/watch?v=NAEp-qL4VHc',
@@ -1198,7 +1192,7 @@ void main() {
       await tester.ensureVisible(find.widgetWithText(FilledButton, 'Download'));
       await tester.tap(find.widgetWithText(FilledButton, 'Download'));
       await tester.pumpAndSettle();
-      expect(find.text('Queued videos'), findsOneWidget);
+      expect(find.byType(DownloadsPage), findsOneWidget);
       final task = controller.manager.tasks.single;
       expect(task.options.videoFormatId, 'v480');
       expect(task.options.audioLanguage, 'en');
@@ -1247,7 +1241,7 @@ void main() {
     await tester.sendKeyUpEvent(LogicalKeyboardKey.controlLeft);
     await tester.pumpAndSettle();
     expect(controller.manager.tasks, hasLength(1));
-    expect(find.text('Queued videos'), findsOneWidget);
+    expect(find.byType(DownloadsPage), findsOneWidget);
   });
 
   testWidgets('single mode automatic download keeps the original navigation', (
@@ -1257,7 +1251,7 @@ void main() {
     await mount(tester);
     await fetchSingle(tester, 'https://first.example/one');
     expect(controller.manager.tasks, hasLength(1));
-    expect(find.text('Queued videos'), findsOneWidget);
+    expect(find.byType(DownloadsPage), findsOneWidget);
   });
 
   testWidgets('Settings switches both ways and preserves separate drafts', (
@@ -1277,7 +1271,7 @@ void main() {
     );
     await tester.pumpAndSettle();
     expect((await SettingsService().load()).multiDownloadMode, isTrue);
-    Navigator.of(tester.element(find.byType(SettingsPage))).pop();
+    AppTabScope.of(tester.element(find.byType(SettingsPage))).onSelected(0);
     await tester.pumpAndSettle();
     expect(find.widgetWithText(FilledButton, 'Add videos'), findsOneWidget);
     expect(find.byType(MediaInfoCard), findsNothing);
@@ -1290,7 +1284,7 @@ void main() {
     );
     await tester.pumpAndSettle();
     expect((await SettingsService().load()).multiDownloadMode, isFalse);
-    Navigator.of(tester.element(find.byType(SettingsPage))).pop();
+    AppTabScope.of(tester.element(find.byType(SettingsPage))).onSelected(0);
     await tester.pumpAndSettle();
     expect(find.byType(HomeVideoList), findsNothing);
     expect(
@@ -1455,7 +1449,7 @@ void main() {
     await tester.pump(const Duration(milliseconds: 400));
     expect(firstProvider.calls, hasLength(2));
     expect(controller.manager.activeCount, 2);
-    Navigator.of(tester.element(find.text('Queued videos'))).pop();
+    AppTabScope.of(tester.element(find.byType(DownloadsPage))).onSelected(0);
     await tester.pump();
     await tester.pump(const Duration(milliseconds: 400));
     expect(find.byType(HomeVideoCard), findsNothing);
@@ -1597,7 +1591,7 @@ void main() {
     await tester.pump();
     await tester.pump(const Duration(milliseconds: 400));
     expect(controller.manager.tasks.single.media.id, 'two');
-    Navigator.of(tester.element(find.text('Queued videos'))).pop();
+    AppTabScope.of(tester.element(find.byType(DownloadsPage))).onSelected(0);
     await tester.pump();
     await tester.pump(const Duration(milliseconds: 400));
     expect(find.text('Your videos (1)'), findsOneWidget);
@@ -1773,7 +1767,7 @@ void main() {
       'two',
       'three',
     ]);
-    expect(find.text('Queued videos'), findsNothing);
+    expect(find.byType(DownloadsPage), findsNothing);
     expect(find.text('Your videos (1)'), findsOneWidget);
     expect(card('Video one'), findsOneWidget);
   });

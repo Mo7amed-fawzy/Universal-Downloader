@@ -2,7 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 
 import '../../app/app_controller.dart';
-import '../../app/routes.dart';
+import 'app_tab_scope.dart';
 import 'app_bottom_navigation.dart';
 import 'app_brand.dart';
 
@@ -13,19 +13,29 @@ class AppScaffold extends StatelessWidget {
     required this.selectedIndex,
     required this.body,
     this.bottomBar,
+    this.isTabShell = false,
   });
 
   final int selectedIndex;
   final Widget body;
   final Widget? bottomBar;
+  final bool isTabShell;
 
   @override
   Widget build(BuildContext context) {
+    if (!isTabShell &&
+        context.getInheritedWidgetOfExactType<AppTabScope>() != null) {
+      return body;
+    }
     final compact = MediaQuery.sizeOf(context).width < 600;
     return Scaffold(
       appBar: AppBar(
+        automaticallyImplyLeading: false,
         title: const AppBrand(),
-        actions: [_ThemeToggle(), _SettingsButton()],
+        actions: [
+          _ThemeToggle(),
+          _SettingsButton(selected: selectedIndex == 2),
+        ],
       ),
       body: compact
           ? SafeArea(child: body)
@@ -79,18 +89,7 @@ class AppScaffold extends StatelessWidget {
   }
 
   static void _navigate(BuildContext context, int index) {
-    final route = switch (index) {
-      0 => AppRoutes.home,
-      1 => AppRoutes.downloads,
-      _ => AppRoutes.settings,
-    };
-    final current = ModalRoute.of(context)?.settings.name;
-    if (current == route) return;
-    if (index == 0) {
-      Navigator.of(context).popUntil((r) => r.settings.name == AppRoutes.home);
-    } else {
-      Navigator.of(context).pushNamed(route);
-    }
+    AppTabScope.of(context).onSelected(index);
   }
 }
 
@@ -113,15 +112,16 @@ class _ThemeToggle extends StatelessWidget {
 }
 
 class _SettingsButton extends StatelessWidget {
+  const _SettingsButton({required this.selected});
+
+  final bool selected;
+
   @override
   Widget build(BuildContext context) {
-    final current = ModalRoute.of(context)?.settings.name;
     return IconButton(
       tooltip: 'Settings',
       icon: const Icon(Icons.settings_outlined),
-      onPressed: current == AppRoutes.settings
-          ? null
-          : () => Navigator.of(context).pushNamed(AppRoutes.settings),
+      onPressed: selected ? null : () => AppTabScope.of(context).onSelected(2),
     );
   }
 }
