@@ -8,6 +8,7 @@ import '../components/status_chip.dart';
 import '../pages/home_input.dart';
 import 'subtitle_picker.dart';
 import 'audio_quality_dropdown.dart';
+import 'audio_stem_section.dart';
 
 /// Provider-agnostic format selection controls: video quality, audio language
 /// + bitrate, and container preference.
@@ -140,6 +141,8 @@ class FormatSelectionCard extends StatelessWidget {
               input: input,
               onChanged: onChanged,
             ),
+            const Divider(height: 32),
+            AudioStemSection(input: input, onChanged: onChanged),
             const Divider(height: 32),
             Text('Container', style: theme.textTheme.titleMedium),
             const SizedBox(height: 8),

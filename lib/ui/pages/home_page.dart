@@ -8,6 +8,7 @@ import '../../app/app_controller.dart';
 import '../widgets/app_tab_scope.dart';
 import '../../core/errors/downloader_exceptions.dart';
 import '../../core/models/audio_format.dart';
+import '../../core/models/audio_output_format.dart';
 import '../../core/models/download_options.dart';
 import '../../core/models/video_format.dart';
 import '../../core/process/cancel_token.dart';
@@ -24,6 +25,7 @@ import '../widgets/home_intro.dart';
 import '../widgets/home_content_layout.dart';
 import '../widgets/home_video_settings.dart';
 import '../widgets/home_playlist_card.dart';
+import '../widgets/home_download_actions.dart';
 import '../widgets/home_remove_confirmation_dialog.dart';
 import '../widgets/playlist_url_dialog.dart';
 import '../widgets/url_input_card.dart';
@@ -59,6 +61,14 @@ class _HomePageState extends State<HomePage> {
       .map((entry) => entry.draft)
       .whereType<HomeVideoDraft>()
       .toList();
+  List<HomeVideoDraft> _selectedPlaylistDrafts(HomePlaylistEntry playlist) =>
+      _entries
+          .where(
+            (entry) => entry.playlist == playlist && entry.selectedForDownload,
+          )
+          .map((entry) => entry.draft)
+          .whereType<HomeVideoDraft>()
+          .toList();
   List<HomeVideoDraft> get _drafts =>
       _entries.map((entry) => entry.draft).whereType<HomeVideoDraft>().toList();
   HomeVideoDraft? _selected;
@@ -376,12 +386,12 @@ class _HomePageState extends State<HomePage> {
     }
   }
 
-  Future<void> _startSingleDownload() async {
+  Future<void> _startSingleDownload({AudioOutputFormat? audioFormat}) async {
     final controller = context.read<AppController>();
     final draft = _singleVideo;
     if (draft == null || _submitting || controller.updatingTools) return;
     try {
-      final directory = _queueDownload(draft);
+      final directory = _queueDownload(draft, audioFormat: audioFormat);
       unawaited(
         controller.rememberDirectory(directory).catchError((Object error) {
           controller.log.error('Could not remember output directory: $error');
@@ -431,6 +441,27 @@ class _HomePageState extends State<HomePage> {
           )) {
             setState(() => _entries.remove(entry));
             continue;
+          }
+          final otherList = _entries
+              .where(
+                (other) =>
+                    other.playlist != entry.playlist &&
+                    other.draft?.provider.id == provider.id &&
+                    other.draft?.info.id == info.id,
+              )
+              .firstOrNull;
+          if (otherList != null) {
+            final listName =
+                otherList.playlist?.title ?? 'regular multi-download list';
+            final messenger = ScaffoldMessenger.of(context);
+            messenger.hideCurrentSnackBar();
+            messenger.showSnackBar(
+              SnackBar(
+                content: Text(
+                  '${info.title} was already fetched in $listName.',
+                ),
+              ),
+            );
           }
           final draft = HomeVideoDraft(
             info: info,
@@ -500,6 +531,75 @@ class _HomePageState extends State<HomePage> {
     });
   }
 
+  List<HomeVideoEntry> _downloadedPlaylistEntries(HomePlaylistEntry playlist) {
+    final prepared = _entries
+        .where((entry) => entry.playlist == playlist && entry.draft != null)
+        .toList();
+    if (prepared.isEmpty) return [];
+    final matches = context.read<AppController>().manager.completedVideosByUrl(
+      prepared.map((entry) => entry.draft!.info.pageUrl),
+    );
+    return prepared
+        .where((entry) => matches.containsKey(entry.draft!.info.pageUrl))
+        .toList();
+  }
+
+  List<HomeVideoEntry> _regularDuplicatesOfPlaylist(
+    HomePlaylistEntry playlist,
+  ) {
+    final playlistVideos = _entries
+        .where((entry) => entry.playlist == playlist && entry.draft != null)
+        .map((entry) => (entry.draft!.provider.id, entry.draft!.info.id))
+        .toSet();
+    return _regularEntries
+        .where(
+          (entry) =>
+              entry.draft != null &&
+              playlistVideos.contains((
+                entry.draft!.provider.id,
+                entry.draft!.info.id,
+              )),
+        )
+        .toList();
+  }
+
+  void _removeRegularDuplicates(HomePlaylistEntry playlist) {
+    final duplicates = _regularDuplicatesOfPlaylist(playlist).toSet();
+    if (duplicates.isEmpty) return;
+    setState(() {
+      if (duplicates.any((entry) => entry.draft == _selected)) {
+        _selected = null;
+      }
+      _entries.removeWhere(duplicates.contains);
+    });
+    final messenger = ScaffoldMessenger.of(context);
+    messenger.hideCurrentSnackBar();
+    messenger.showSnackBar(
+      SnackBar(
+        content: Text(
+          'Removed ${duplicates.length} duplicate ${duplicates.length == 1 ? 'video' : 'videos'} from the regular multi-download list. The ${playlist.title} playlist keeps its ${duplicates.length == 1 ? 'copy' : 'copies'}.',
+        ),
+      ),
+    );
+  }
+
+  Future<void> _removeDownloadedFromPlaylist(HomePlaylistEntry playlist) async {
+    final downloaded = _downloadedPlaylistEntries(playlist).toSet();
+    if (downloaded.isEmpty) return;
+    final confirmed = await HomeRemoveConfirmationDialog.confirm(
+      context,
+      title: playlist.title,
+      downloadedCount: downloaded.length,
+    );
+    if (!mounted || !confirmed || !_playlists.contains(playlist)) return;
+    setState(() {
+      if (downloaded.any((entry) => entry.draft == _selected)) {
+        _selected = null;
+      }
+      _entries.removeWhere(downloaded.contains);
+    });
+  }
+
   void _selectDraft(HomeVideoDraft draft) {
     setState(() => _selected = draft);
     WidgetsBinding.instance.addPostFrameCallback((_) {
@@ -541,6 +641,12 @@ class _HomePageState extends State<HomePage> {
             .firstOrNull;
         input.selectSubtitle(subtitle);
         input.selectDownloadSubtitleFile(selected.downloadSubtitleFile);
+        input.selectKeepSpeech(selected.keepSpeech);
+        input.selectKeepMusic(selected.keepMusic);
+        input.selectKeepEffects(selected.keepEffects);
+        input.selectSpeechRemovalStrength(selected.speechRemovalStrength);
+        input.selectMusicRemovalStrength(selected.musicRemovalStrength);
+        input.selectEffectsRemovalStrength(selected.effectsRemovalStrength);
         if (selected.downloadSubtitleFile && subtitle == null) {
           missingSubtitles++;
         }
@@ -556,7 +662,11 @@ class _HomePageState extends State<HomePage> {
     );
   }
 
-  void _startDownloads(List<HomeVideoDraft> drafts, {bool navigate = true}) {
+  void _startDownloads(
+    List<HomeVideoDraft> drafts, {
+    bool navigate = true,
+    AudioOutputFormat? audioFormat,
+  }) {
     final controller = context.read<AppController>();
     if (_submitting ||
         controller.updatingTools ||
@@ -570,7 +680,7 @@ class _HomePageState extends State<HomePage> {
     String? lastDirectory;
     for (final draft in pending) {
       try {
-        lastDirectory = _queueDownload(draft);
+        lastDirectory = _queueDownload(draft, audioFormat: audioFormat);
         final entry = _entries.firstWhere((entry) => entry.draft == draft);
         if (entry.playlist != null) entry.playlist!.queuedCount++;
         _entries.removeWhere((entry) => entry.draft == draft);
@@ -610,10 +720,18 @@ class _HomePageState extends State<HomePage> {
     }
   }
 
-  String _queueDownload(HomeVideoDraft draft) {
+  String _queueDownload(
+    HomeVideoDraft draft, {
+    AudioOutputFormat? audioFormat,
+  }) {
     final controller = context.read<AppController>();
     final info = draft.info;
     final input = draft.input;
+    if (audioFormat != null && input.isMuted) {
+      throw AudioNotAvailableException(
+        'Audio is muted for this video. Keep at least one audio component to download it as audio.',
+      );
+    }
 
     final video = _selector.selectBestVideo(
       info.videoFormats,
@@ -690,7 +808,14 @@ class _HomePageState extends State<HomePage> {
       videoFormatId: video.formatId,
       audioFormatId: audio?.formatId,
       audioLanguage: audioLanguageCode,
-      subtitle: input.subtitleToDownload,
+      subtitle: audioFormat == null ? input.subtitleToDownload : null,
+      audioOutputFormat: audioFormat,
+      keepSpeech: input.keepSpeech,
+      keepMusic: input.keepMusic,
+      keepEffects: input.keepEffects,
+      speechRemovalStrength: input.speechRemovalStrength,
+      musicRemovalStrength: input.musicRemovalStrength,
+      effectsRemovalStrength: input.effectsRemovalStrength,
       overwrite: false,
       containerPreference: input.containerPreference,
     );
@@ -703,8 +828,10 @@ class _HomePageState extends State<HomePage> {
       provider: draft.provider,
       media: info,
       options: options,
-      videoLabel: _videoLabel(video),
-      audioLabel: audioLabel,
+      videoLabel: audioFormat == null ? _videoLabel(video) : 'Audio only',
+      audioLabel: audioFormat == null
+          ? audioLabel
+          : '${audioFormat.label} · $audioLabel',
     );
     return directory;
   }
@@ -853,6 +980,14 @@ class _HomePageState extends State<HomePage> {
                               : multiDownloadMode
                               ? () => _startDownloads([selected])
                               : _startSingleDownload,
+                          onDownloadAudio: busy || selected.input.isMuted
+                              ? null
+                              : multiDownloadMode
+                              ? (format) => _startDownloads([
+                                  selected,
+                                ], audioFormat: format)
+                              : (format) =>
+                                    _startSingleDownload(audioFormat: format),
                         ),
                       ),
                       if (selectedPlaylist != null)
@@ -881,41 +1016,55 @@ class _HomePageState extends State<HomePage> {
                     if (multiDownloadMode)
                       for (final playlist in _playlists) ...[
                         const SizedBox(height: 20),
-                        HomePlaylistCard(
+                        ListenableBuilder(
                           key: ObjectKey(playlist),
-                          playlist: playlist,
-                          outputDirectory: playlist.outputDirectory.isEmpty
-                              ? controller.resolveOutputDirectory()
-                              : playlist.outputDirectory,
-                          onOutputDirectoryChanged: (directory) =>
-                              _selectPlaylistDirectory(playlist, directory),
-                          entries: _entries
-                              .where((entry) => entry.playlist == playlist)
-                              .toList(),
-                          selected: selected,
-                          onSelect: _selectDraft,
-                          onSelectionChanged: () => setState(() {}),
-                          onRetryVideo: _retryEntry,
-                          onRemoveVideo: _removeEntry,
-                          onRetry: () => _fetchPlaylist(playlist),
-                          onRemove: () => _removePlaylist(playlist),
-                          onToggleCollapsed: () => setState(
-                            () => playlist.collapsed = !playlist.collapsed,
+                          listenable: controller.manager,
+                          builder: (context, _) => HomePlaylistCard(
+                            playlist: playlist,
+                            downloadedCount: _downloadedPlaylistEntries(
+                              playlist,
+                            ).length,
+                            duplicateCount: _regularDuplicatesOfPlaylist(
+                              playlist,
+                            ).length,
+                            onRemoveDuplicates: busy
+                                ? null
+                                : () => _removeRegularDuplicates(playlist),
+                            onRemoveDownloaded: busy
+                                ? null
+                                : () => _removeDownloadedFromPlaylist(playlist),
+                            outputDirectory: playlist.outputDirectory.isEmpty
+                                ? controller.resolveOutputDirectory()
+                                : playlist.outputDirectory,
+                            onOutputDirectoryChanged: (directory) =>
+                                _selectPlaylistDirectory(playlist, directory),
+                            entries: _entries
+                                .where((entry) => entry.playlist == playlist)
+                                .toList(),
+                            selected: selected,
+                            onSelect: _selectDraft,
+                            onSelectionChanged: () => setState(() {}),
+                            onRetryVideo: _retryEntry,
+                            onRemoveVideo: _removeEntry,
+                            onRetry: () => _fetchPlaylist(playlist),
+                            onRemove: () => _removePlaylist(playlist),
+                            onToggleCollapsed: () => setState(
+                              () => playlist.collapsed = !playlist.collapsed,
+                            ),
+                            onDownload: busy
+                                ? null
+                                : () => _startDownloads(
+                                    _selectedPlaylistDrafts(playlist),
+                                    navigate: false,
+                                  ),
+                            onDownloadAudio: busy
+                                ? null
+                                : (format) => _startDownloads(
+                                    _selectedPlaylistDrafts(playlist),
+                                    navigate: false,
+                                    audioFormat: format,
+                                  ),
                           ),
-                          onDownload: busy
-                              ? null
-                              : () => _startDownloads(
-                                  _entries
-                                      .where(
-                                        (entry) =>
-                                            entry.playlist == playlist &&
-                                            entry.selectedForDownload,
-                                      )
-                                      .map((entry) => entry.draft)
-                                      .whereType<HomeVideoDraft>()
-                                      .toList(),
-                                  navigate: false,
-                                ),
                         ),
                       ],
                     if (multiDownloadMode && _regularEntries.isNotEmpty) ...[
@@ -945,17 +1094,18 @@ class _HomePageState extends State<HomePage> {
                       const SizedBox(height: 12),
                       Align(
                         alignment: Alignment.centerRight,
-                        child: FilledButton.icon(
-                          onPressed: busy || _regularDrafts.isEmpty
+                        child: HomeDownloadActions(
+                          downloadLabel:
+                              'Download ${_regularEntries.every((entry) => entry.selectedForDownload) ? 'all' : 'selected'} (${_regularDrafts.length})',
+                          onDownload: busy || _regularDrafts.isEmpty
                               ? null
                               : () => _startDownloads(_regularDrafts),
-                          icon: const Icon(Icons.download),
-                          label: Text(
-                            'Download ${_regularEntries.every((entry) => entry.selectedForDownload) ? 'all' : 'selected'} (${_regularDrafts.length})',
-                          ),
-                          style: FilledButton.styleFrom(
-                            minimumSize: const Size(220, 52),
-                          ),
+                          onDownloadAudio: busy || _regularDrafts.isEmpty
+                              ? null
+                              : (format) => _startDownloads(
+                                  _regularDrafts,
+                                  audioFormat: format,
+                                ),
                         ),
                       ),
                     ],

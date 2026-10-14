@@ -65,10 +65,14 @@ class DownloadManager extends ChangeNotifier {
   int completedVideoCount(Iterable<Uri> urls) =>
       completedVideosForUrls(urls).length;
 
-  List<DownloadTask> completedVideosForUrls(Iterable<Uri> urls) {
+  List<DownloadTask> completedVideosForUrls(Iterable<Uri> urls) =>
+      completedVideosByUrl(urls).values.toSet().toList();
+
+  Map<Uri, DownloadTask> completedVideosByUrl(Iterable<Uri> urls) {
     final completed = <(String, String), DownloadTask>{};
     for (final task in tasks) {
       if (task.state != DownloadTaskState.completed) continue;
+      if (task.options.audioOutputFormat != null) continue;
       final key = _sourceKey(task.providerId, task.media.pageUrl);
       final previous = completed[key];
       if (previous == null ||
@@ -78,7 +82,7 @@ class DownloadManager extends ChangeNotifier {
         completed[key] = task;
       }
     }
-    final matches = <(String, String), DownloadTask>{};
+    final matches = <Uri, DownloadTask>{};
     for (final url in urls) {
       if ((url.scheme != 'http' && url.scheme != 'https') || url.host.isEmpty) {
         continue;
@@ -87,9 +91,9 @@ class DownloadManager extends ChangeNotifier {
       if (provider == null) continue;
       final key = _sourceKey(provider.id, url);
       final task = completed[key];
-      if (task != null) matches[key] = task;
+      if (task != null) matches[url] = task;
     }
-    return matches.values.toList();
+    return matches;
   }
 
   (String, String) _sourceKey(String providerId, Uri url) => (

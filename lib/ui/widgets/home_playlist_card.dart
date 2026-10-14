@@ -1,10 +1,12 @@
 import 'package:flutter/material.dart';
 
+import '../../core/models/audio_output_format.dart';
 import '../pages/home_playlist_entry.dart';
 import '../pages/home_video_draft.dart';
 import '../pages/home_video_entry.dart';
 import 'home_playlist_video_tile.dart';
 import 'home_download_selection.dart';
+import 'home_download_actions.dart';
 import 'output_folder_row.dart';
 
 class HomePlaylistCard extends StatelessWidget {
@@ -19,8 +21,13 @@ class HomePlaylistCard extends StatelessWidget {
     required this.onRemoveVideo,
     required this.onRetry,
     required this.onRemove,
+    required this.onRemoveDownloaded,
+    required this.downloadedCount,
+    required this.onRemoveDuplicates,
+    required this.duplicateCount,
     required this.onToggleCollapsed,
     required this.onDownload,
+    required this.onDownloadAudio,
     required this.outputDirectory,
     required this.onOutputDirectoryChanged,
   });
@@ -34,8 +41,13 @@ class HomePlaylistCard extends StatelessWidget {
   final ValueChanged<HomeVideoEntry> onRemoveVideo;
   final VoidCallback onRetry;
   final VoidCallback onRemove;
+  final VoidCallback? onRemoveDownloaded;
+  final int downloadedCount;
+  final VoidCallback? onRemoveDuplicates;
+  final int duplicateCount;
   final VoidCallback onToggleCollapsed;
   final VoidCallback? onDownload;
+  final ValueChanged<AudioOutputFormat>? onDownloadAudio;
   final String outputDirectory;
   final ValueChanged<String> onOutputDirectoryChanged;
 
@@ -163,12 +175,27 @@ class HomePlaylistCard extends StatelessWidget {
                       playlist.collapsed ? 'Show videos' : 'Hide videos',
                     ),
                   ),
-                  FilledButton.icon(
-                    onPressed: preparing || selectedReady == 0
+                  if (downloadedCount > 0)
+                    OutlinedButton.icon(
+                      onPressed: onRemoveDownloaded,
+                      icon: const Icon(Icons.remove_circle_outline),
+                      label: Text('Remove downloaded ($downloadedCount)'),
+                    ),
+                  if (duplicateCount > 0)
+                    OutlinedButton.icon(
+                      onPressed: onRemoveDuplicates,
+                      icon: const Icon(Icons.filter_none),
+                      label: Text('Remove duplicates ($duplicateCount)'),
+                    ),
+                  HomeDownloadActions(
+                    compact: true,
+                    downloadLabel: 'Download playlist ($selectedReady)',
+                    onDownload: preparing || selectedReady == 0
                         ? null
                         : onDownload,
-                    icon: const Icon(Icons.download),
-                    label: Text('Download playlist ($selectedReady)'),
+                    onDownloadAudio: preparing || selectedReady == 0
+                        ? null
+                        : onDownloadAudio,
                   ),
                 ],
               ),

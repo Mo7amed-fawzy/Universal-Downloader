@@ -4,6 +4,7 @@ import '../pages/home_video_draft.dart';
 import '../pages/home_video_entry.dart';
 import 'home_download_checkbox.dart';
 import 'home_video_folder_button.dart';
+import 'previous_video_download_warning.dart';
 
 class HomeVideoCard extends StatelessWidget {
   const HomeVideoCard({
@@ -126,6 +127,11 @@ class HomeVideoCard extends StatelessWidget {
                 ),
               ),
             ),
+          ),
+          const Spacer(),
+          PreviousVideoDownloadWarning(
+            url: draft.info.pageUrl,
+            padding: const EdgeInsets.fromLTRB(12, 0, 12, 8),
           ),
           if (theme.platform != TargetPlatform.android)
             Padding(

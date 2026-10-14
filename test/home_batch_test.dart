@@ -11,6 +11,7 @@ import 'package:universal_downloader/app/theme/app_theme.dart';
 import 'package:universal_downloader/app/routes.dart';
 import 'package:universal_downloader/core/errors/downloader_exceptions.dart';
 import 'package:universal_downloader/core/models/audio_format.dart';
+import 'package:universal_downloader/core/models/audio_output_format.dart';
 import 'package:universal_downloader/core/models/download_options.dart';
 import 'package:universal_downloader/core/models/media_info.dart';
 import 'package:universal_downloader/core/models/subtitle_track.dart';
@@ -26,6 +27,7 @@ import 'package:universal_downloader/core/services/log_service.dart';
 import 'package:universal_downloader/downloads/download_manager.dart';
 import 'package:universal_downloader/downloads/download_repository.dart';
 import 'package:universal_downloader/downloads/download_task_state.dart';
+import 'package:universal_downloader/downloads/download_task.dart';
 import 'package:universal_downloader/providers/downloader_provider.dart';
 import 'package:universal_downloader/providers/format_selector.dart';
 import 'package:universal_downloader/providers/provider_registry.dart';
@@ -642,6 +644,8 @@ void main() {
     editor.draft.input.selectAudioLanguage('en');
     editor.draft.input.selectSubtitle(editor.draft.info.subtitleTracks.first);
     editor.draft.input.selectDownloadSubtitleFile(true);
+    editor.draft.input.selectKeepMusic(false);
+    editor.draft.input.selectMusicRemovalStrength(0.35);
     await tester.ensureVisible(find.text('Apply these settings to playlist'));
     await tester.tap(find.text('Apply these settings to playlist'));
     await tester.pump();
@@ -656,6 +660,8 @@ void main() {
       entries.map((entry) => entry.draft!.input.audioLanguage),
       everyElement('en'),
     );
+    expect(entries.last.draft!.input.keepMusic, isFalse);
+    expect(entries.last.draft!.input.musicRemovalStrength, 0.35);
     expect(
       entries.last.draft!.input.subtitle,
       same(entries.last.draft!.info.subtitleTracks.first),
@@ -666,6 +672,7 @@ void main() {
         .single;
     expect(ordinary.draft!.input.videoHeight, isNull);
     expect(ordinary.draft!.input.audioLanguage, 'ar');
+    expect(ordinary.draft!.input.keepMusic, isTrue);
   });
 
   testWidgets(
@@ -685,6 +692,77 @@ void main() {
       expect(controller.playlistFetchCount, 1);
     },
   );
+
+  testWidgets('playlist removes matching regular video cards below it', (
+    tester,
+  ) async {
+    await mount(tester);
+    await addLinks(tester, 'https://first.example/one');
+    await addPlaylist(tester);
+
+    expect(find.text('Remove duplicates (1)'), findsOneWidget);
+    expect(
+      find.textContaining('already fetched in regular multi-download list'),
+      findsOneWidget,
+    );
+    final removeDuplicates = find.text('Remove duplicates (1)');
+    await tester.ensureVisible(removeDuplicates);
+    await tester.tap(removeDuplicates);
+    await tester.pump(const Duration(milliseconds: 300));
+    await tester.pump(const Duration(milliseconds: 300));
+
+    expect(find.text('Your videos (1)'), findsNothing);
+    expect(find.byType(HomeVideoList), findsNothing);
+    expect(
+      tester.widget<HomePlaylistCard>(find.byType(HomePlaylistCard)).entries,
+      hasLength(2),
+    );
+    expect(find.text('Remove duplicates (1)'), findsNothing);
+    expect(
+      find.textContaining('Removed 1 duplicate video from the regular'),
+      findsOneWidget,
+    );
+    expect(tester.takeException(), isNull);
+  });
+
+  testWidgets('duplicate fetched after playlist names its playlist', (
+    tester,
+  ) async {
+    await mount(tester);
+    await addPlaylist(tester);
+    await addLinks(tester, 'https://first.example/two');
+
+    expect(
+      find.textContaining('already fetched in My learning playlist'),
+      findsOneWidget,
+    );
+    expect(find.text('Remove duplicates (1)'), findsOneWidget);
+  });
+
+  testWidgets('regular batch cards keep equal height with a download warning', (
+    tester,
+  ) async {
+    controller.manager.queue.add(
+      previousVideoDownload(
+        firstProvider,
+        Uri.parse('https://first.example/one'),
+        root,
+      ),
+    );
+    await mount(tester, width: 375, textScale: 1.3);
+    await addLinks(
+      tester,
+      'https://first.example/one\nhttps://first.example/two',
+    );
+
+    final cards = find.byType(HomeVideoCard);
+    expect(cards, findsNWidgets(2));
+    expect(
+      tester.getSize(cards.first).height,
+      tester.getSize(cards.last).height,
+    );
+    expect(tester.takeException(), isNull);
+  });
 
   testWidgets('single mode hides playlist action and blocks playlist URLs', (
     tester,
@@ -1072,6 +1150,225 @@ void main() {
     );
   });
 
+  for (final brightness in Brightness.values) {
+    testWidgets(
+      'prepared batch card warns about a previous video in $brightness',
+      (tester) async {
+        final url = Uri.parse('https://first.example/one');
+        controller.manager.queue.add(
+          previousVideoDownload(firstProvider, url, root),
+        );
+        await mount(tester, width: 375, brightness: brightness);
+        await addLinks(
+          tester,
+          'https://first.example/one https://first.example/two',
+        );
+
+        final warning = find.descendant(
+          of: card('Video one'),
+          matching: find.byType(DownloadedVideoWarning),
+        );
+        expect(warning, findsOneWidget);
+        expect(
+          find.descendant(
+            of: card('Video two'),
+            matching: find.byType(DownloadedVideoWarning),
+          ),
+          findsNothing,
+        );
+        expect(find.text('Already downloaded'), findsOneWidget);
+        expect(tester.takeException(), isNull);
+
+        await tester.ensureVisible(warning);
+        await tester.tap(warning);
+        await tester.pumpAndSettle();
+        expect(find.byType(DownloadsPage), findsOneWidget);
+        expect(
+          tester
+              .widget<DownloadsPage>(find.byType(DownloadsPage))
+              .initialTaskId,
+          'previous-one',
+        );
+      },
+    );
+  }
+
+  testWidgets('playlist row warns only for previously downloaded video', (
+    tester,
+  ) async {
+    final url = Uri.parse('https://first.example/two');
+    controller.manager.queue.add(
+      previousVideoDownload(firstProvider, url, root),
+    );
+    await mount(tester);
+    await addPlaylist(tester);
+
+    final rows = find.byType(HomePlaylistVideoTile);
+    expect(
+      find.descendant(
+        of: rows.first,
+        matching: find.byType(DownloadedVideoWarning),
+      ),
+      findsNothing,
+    );
+    final warning = find.descendant(
+      of: rows.last,
+      matching: find.byType(DownloadedVideoWarning),
+    );
+    expect(warning, findsOneWidget);
+    expect(tester.takeException(), isNull);
+    await tester.ensureVisible(warning);
+    await tester.tap(warning);
+    await tester.pumpAndSettle();
+    expect(find.byType(DownloadsPage), findsOneWidget);
+    expect(
+      tester.widget<DownloadsPage>(find.byType(DownloadsPage)).initialTaskId,
+      'previous-two',
+    );
+  });
+
+  testWidgets(
+    'playlist removes previously downloaded entries only after confirmation',
+    (tester) async {
+      final url = Uri.parse('https://first.example/one');
+      controller.manager.queue.add(
+        previousVideoDownload(firstProvider, url, root),
+      );
+      await mount(tester, width: 375, textScale: 1.3);
+      await addLinks(tester, 'https://first.example/three');
+      await addPlaylist(tester);
+
+      final removeDownloaded = find.descendant(
+        of: find.byType(HomePlaylistCard),
+        matching: find.text('Remove downloaded (1)'),
+      );
+      expect(removeDownloaded, findsOneWidget);
+      await tester.ensureVisible(removeDownloaded);
+      await tester.tap(removeDownloaded);
+      await tester.pumpAndSettle();
+      expect(find.text('Remove downloaded videos?'), findsOneWidget);
+      expect(
+        find.textContaining('Downloaded files and history will stay'),
+        findsOneWidget,
+      );
+      await tester.tap(find.text('Cancel'));
+      await tester.pumpAndSettle();
+      expect(
+        tester.widget<HomePlaylistCard>(find.byType(HomePlaylistCard)).entries,
+        hasLength(2),
+      );
+
+      await tester.tap(removeDownloaded);
+      await tester.pumpAndSettle();
+      await tester.tap(find.widgetWithText(FilledButton, 'Remove'));
+      await tester.pumpAndSettle();
+
+      final playlistCard = tester.widget<HomePlaylistCard>(
+        find.byType(HomePlaylistCard),
+      );
+      expect(playlistCard.entries.map((entry) => entry.draft?.info.id), [
+        'two',
+      ]);
+      expect(find.text('1 videos · 1 ready'), findsOneWidget);
+      expect(find.text('Remove downloaded (1)'), findsNothing);
+      expect(find.byType(HomeVideoList), findsOneWidget);
+      expect(controller.manager.tasks.map((task) => task.id), ['previous-one']);
+      expect(tester.takeException(), isNull);
+    },
+  );
+
+  testWidgets('playlist remove action ignores audio-only history', (
+    tester,
+  ) async {
+    final url = Uri.parse('https://first.example/one');
+    controller.manager.queue.add(
+      previousVideoDownload(firstProvider, url, root, audioOnly: true),
+    );
+    await mount(tester);
+    await addPlaylist(tester);
+    expect(find.textContaining('Remove downloaded ('), findsNothing);
+  });
+
+  testWidgets('playlist remove action clears all matching videos at once', (
+    tester,
+  ) async {
+    for (final name in ['one', 'two']) {
+      controller.manager.queue.add(
+        previousVideoDownload(
+          firstProvider,
+          Uri.parse('https://first.example/$name'),
+          root,
+        ),
+      );
+    }
+    await mount(tester);
+    await addPlaylist(tester);
+    final removeDownloaded = find.text('Remove downloaded (2)');
+    expect(removeDownloaded, findsOneWidget);
+    await tester.ensureVisible(removeDownloaded);
+    await tester.tap(removeDownloaded);
+    await tester.pumpAndSettle();
+    await tester.tap(find.widgetWithText(FilledButton, 'Remove'));
+    await tester.pumpAndSettle();
+
+    expect(
+      tester.widget<HomePlaylistCard>(find.byType(HomePlaylistCard)).entries,
+      isEmpty,
+    );
+    expect(controller.manager.tasks, hasLength(2));
+    expect(find.byType(HomePlaylistCard), findsOneWidget);
+  });
+
+  testWidgets('audio-only history does not warn on a prepared batch card', (
+    tester,
+  ) async {
+    final url = Uri.parse('https://first.example/one');
+    controller.manager.queue.add(
+      previousVideoDownload(firstProvider, url, root, audioOnly: true),
+    );
+    await mount(tester);
+    await addLinks(tester, url.toString());
+    expect(
+      find.descendant(
+        of: card('Video one'),
+        matching: find.byType(DownloadedVideoWarning),
+      ),
+      findsNothing,
+    );
+  });
+
+  testWidgets('audio-only completion does not claim the video was downloaded', (
+    tester,
+  ) async {
+    controller.settings = const AppSettings();
+    final media = firstProvider.media(Uri.parse('https://first.example/one'));
+    controller.manager.queue.add(
+      DownloadTask.completed(
+        id: 'audio-only',
+        media: media,
+        options: DownloadOptions(
+          taskId: 'audio-only',
+          outputDirectory: root.path,
+          title: media.title,
+          videoFormatId: 'v2160',
+          audioFormatId: 'ar256',
+          audioOutputFormat: AudioOutputFormat.mp3,
+        ),
+        providerId: firstProvider.id,
+        providerName: firstProvider.displayName,
+        videoLabel: 'Audio only',
+        audioLabel: 'MP3',
+        outputPath: '${root.path}/audio.mp3',
+        startedAt: DateTime.utc(2026, 10, 14),
+        completedAt: DateTime.utc(2026, 10, 14),
+      ),
+    );
+    await mount(tester);
+    await tester.enterText(find.byType(TextField), media.pageUrl.toString());
+    await tester.pump();
+    expect(find.byType(DownloadedVideoWarning), findsNothing);
+  });
+
   testWidgets('warning reveals the newest matching download deep in history', (
     tester,
   ) async {
@@ -1178,6 +1475,8 @@ void main() {
       expect(input.videoHeight, 480);
       expect(input.autoBestAudio, isFalse);
       expect(input.audioLanguage, 'en');
+      input.selectKeepMusic(false);
+      input.selectMusicRemovalStrength(0.4);
       expect(
         tester.widget<TextField>(find.byType(TextField)).controller!.text,
         'https://first.example/one',
@@ -1197,10 +1496,179 @@ void main() {
       expect(task.options.videoFormatId, 'v480');
       expect(task.options.audioLanguage, 'en');
       expect(task.options.audioFormatId, 'en128');
+      expect(task.options.keepMusic, isFalse);
+      expect(task.options.musicRemovalStrength, 0.4);
       expect(task.options.containerPreference, ContainerPreference.mkv);
       expect(task.options.subtitle?.language, 'en');
     },
   );
+
+  testWidgets('single mode offers audio-only formats beside video download', (
+    tester,
+  ) async {
+    controller.settings = const AppSettings(preferredLanguage: 'en');
+    await mount(tester, width: 375);
+    await fetchSingle(tester, 'https://first.example/one');
+    await tester.ensureVisible(find.text('Download audio'));
+    await tester.tap(find.text('Download audio'));
+    await tester.pumpAndSettle();
+    for (final label in ['MP3', 'M4A', 'FLAC']) {
+      expect(find.text(label), findsOneWidget);
+    }
+    await tester.tap(find.text('MP3'));
+    await tester.pumpAndSettle();
+    final task = controller.manager.tasks.single;
+    expect(task.options.audioOutputFormat, AudioOutputFormat.mp3);
+    expect(task.options.audioFormatId, 'en128');
+    expect(task.options.audioLanguage, 'en');
+    expect(task.options.subtitle, isNull);
+    expect(task.videoLabel, 'Audio only');
+  });
+
+  testWidgets('batch editor queues selected audio-only format', (tester) async {
+    await mount(tester);
+    await addLinks(tester, 'https://first.example/one');
+    await openVideo(tester, 'Video one');
+    final audioAction = find.descendant(
+      of: find.byType(HomeVideoSettings),
+      matching: find.text('Download audio'),
+    );
+    await tester.ensureVisible(audioAction);
+    await tester.tap(audioAction);
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('FLAC'));
+    await tester.pumpAndSettle();
+    expect(
+      controller.manager.tasks.single.options.audioOutputFormat,
+      AudioOutputFormat.flac,
+    );
+    expect(find.byType(HomeVideoList), findsNothing);
+  });
+
+  testWidgets(
+    'batch audio action queues only checked videos with their settings',
+    (tester) async {
+      await mount(tester);
+      await addLinks(
+        tester,
+        'https://first.example/one https://first.example/two',
+      );
+      final entries = tester
+          .widget<HomeVideoList>(find.byType(HomeVideoList))
+          .entries;
+      entries.first.draft!.input.selectAudioLanguage('en');
+      entries.first.draft!.input.selectSubtitle(
+        entries.first.draft!.info.subtitleTracks.single,
+      );
+      entries.first.draft!.input.selectDownloadSubtitleFile(true);
+      entries.last.selectedForDownload = false;
+      await tester.pump();
+
+      await tester.ensureVisible(find.text('Download audio'));
+      await tester.tap(find.text('Download audio'));
+      await tester.pumpAndSettle();
+      for (final label in ['MP3', 'M4A', 'FLAC']) {
+        expect(find.text(label), findsOneWidget);
+      }
+      await tester.tap(find.text('M4A'));
+      await tester.pumpAndSettle();
+
+      final tasks = controller.manager.tasks;
+      expect(tasks, hasLength(1));
+      expect(tasks.single.media.id, 'one');
+      expect(tasks.single.options.audioOutputFormat, AudioOutputFormat.m4a);
+      expect(tasks.single.options.audioFormatId, 'en128');
+      expect(tasks.single.options.audioLanguage, 'en');
+      expect(tasks.single.options.subtitle, isNull);
+      expect(tasks.single.videoLabel, 'Audio only');
+      expect(find.byType(DownloadsPage), findsOneWidget);
+    },
+  );
+
+  testWidgets('batch audio action queues every selected video', (tester) async {
+    await mount(tester);
+    await addLinks(
+      tester,
+      'https://first.example/one https://first.example/two',
+    );
+    await tester.ensureVisible(find.text('Download audio'));
+    await tester.tap(find.text('Download audio'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('MP3'));
+    await tester.pumpAndSettle();
+
+    expect(controller.manager.tasks.map((task) => task.media.id), [
+      'one',
+      'two',
+    ]);
+    expect(
+      controller.manager.tasks.map((task) => task.options.audioOutputFormat),
+      everyElement(AudioOutputFormat.mp3),
+    );
+  });
+
+  testWidgets('playlist audio action queues its checked entries only', (
+    tester,
+  ) async {
+    await mount(tester);
+    await addLinks(tester, 'https://first.example/three');
+    await addPlaylist(tester);
+    final playlistCard = tester.widget<HomePlaylistCard>(
+      find.byType(HomePlaylistCard),
+    );
+    playlistCard.entries.last.selectedForDownload = false;
+    final draft = playlistCard.entries.first.draft!;
+    draft.input.selectAudioLanguage('en');
+    await tester.pump();
+
+    final audioAction = find.descendant(
+      of: find.byType(HomePlaylistCard),
+      matching: find.text('Download audio'),
+    );
+    await tester.ensureVisible(audioAction);
+    await tester.tap(audioAction);
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('FLAC'));
+    await tester.pumpAndSettle();
+
+    expect(controller.manager.tasks, hasLength(1));
+    final task = controller.manager.tasks.single;
+    expect(task.media.id, draft.info.id);
+    expect(task.options.audioOutputFormat, AudioOutputFormat.flac);
+    expect(task.options.audioLanguage, 'en');
+    expect(task.options.outputDirectory, playlistCard.playlist.outputDirectory);
+    expect(find.byType(HomePlaylistCard), findsOneWidget);
+    expect(find.byType(HomeVideoList), findsOneWidget);
+  });
+
+  testWidgets('batch audio keeps muted items for correction', (tester) async {
+    await mount(tester);
+    await addLinks(
+      tester,
+      'https://first.example/one https://first.example/two',
+    );
+    final entries = tester
+        .widget<HomeVideoList>(find.byType(HomeVideoList))
+        .entries;
+    final muted = entries.first.draft!.input;
+    muted.selectKeepSpeech(false);
+    muted.selectKeepMusic(false);
+    muted.selectKeepEffects(false);
+    await tester.pump();
+
+    await tester.ensureVisible(find.text('Download audio'));
+    await tester.tap(find.text('Download audio'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('MP3'));
+    await tester.pumpAndSettle();
+
+    expect(controller.manager.tasks.map((task) => task.media.id), ['two']);
+    expect(find.text('Your videos (1)'), findsOneWidget);
+    expect(
+      find.textContaining('Audio is muted for this video'),
+      findsOneWidget,
+    );
+  });
 
   testWidgets(
     'single mode rejects multiple links and can retry a failed fetch',
@@ -1959,4 +2427,32 @@ class BatchController extends Fake implements AppController {
   @override
   void removeListener(VoidCallback listener) =>
       _notifier.removeListener(listener);
+}
+
+DownloadTask previousVideoDownload(
+  BatchProvider provider,
+  Uri url,
+  Directory root, {
+  bool audioOnly = false,
+}) {
+  final media = provider.media(url);
+  final name = url.pathSegments.last;
+  return DownloadTask.completed(
+    id: 'previous-$name',
+    media: media,
+    options: DownloadOptions(
+      taskId: 'previous-$name',
+      outputDirectory: root.path,
+      title: media.title,
+      videoFormatId: 'v2160',
+      audioOutputFormat: audioOnly ? AudioOutputFormat.mp3 : null,
+    ),
+    providerId: provider.id,
+    providerName: provider.displayName,
+    videoLabel: audioOnly ? 'Audio only' : '2160p',
+    audioLabel: 'Arabic',
+    outputPath: '${root.path}/$name.${audioOnly ? 'mp3' : 'mkv'}',
+    startedAt: DateTime.utc(2026, 10, 14),
+    completedAt: DateTime.utc(2026, 10, 14),
+  );
 }

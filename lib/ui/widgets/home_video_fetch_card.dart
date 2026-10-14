@@ -86,6 +86,7 @@ class HomeVideoFetchCard extends StatelessWidget {
                 icon: const Icon(Icons.refresh),
                 label: const Text('Retry'),
               ),
+            const Spacer(),
           ],
         ),
       ),

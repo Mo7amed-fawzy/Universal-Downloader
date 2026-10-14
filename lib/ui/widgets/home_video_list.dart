@@ -87,50 +87,54 @@ class _HomeVideoListState extends State<HomeVideoList> {
                   controller: _scrollController,
                   scrollDirection: Axis.horizontal,
                   padding: const EdgeInsets.only(bottom: 16),
-                  child: Row(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      for (
-                        var index = 0;
-                        index < widget.entries.length;
-                        index++
-                      ) ...[
-                        if (index > 0) const SizedBox(width: 12),
-                        SizedBox(
-                          width: width,
-                          child: widget.entries[index].draft != null
-                              ? HomeVideoCard(
-                                  key: ValueKey(
-                                    widget.entries[index].draft!.id,
+                  child: IntrinsicHeight(
+                    child: Row(
+                      crossAxisAlignment: CrossAxisAlignment.stretch,
+                      children: [
+                        for (
+                          var index = 0;
+                          index < widget.entries.length;
+                          index++
+                        ) ...[
+                          if (index > 0) const SizedBox(width: 12),
+                          SizedBox(
+                            width: width,
+                            child: widget.entries[index].draft != null
+                                ? HomeVideoCard(
+                                    key: ValueKey(
+                                      widget.entries[index].draft!.id,
+                                    ),
+                                    entry: widget.entries[index],
+                                    onOutputDirectoryChanged: (directory) =>
+                                        widget.onVideoDirectoryChanged(
+                                          widget.entries[index].draft!,
+                                          directory,
+                                        ),
+                                    onSelectionChanged:
+                                        widget.onSelectionChanged,
+                                    selected:
+                                        widget.selected ==
+                                        widget.entries[index].draft,
+                                    onSelect: () => widget.onSelect(
+                                      widget.entries[index].draft!,
+                                    ),
+                                    onRemove: () =>
+                                        widget.onRemove(widget.entries[index]),
+                                  )
+                                : HomeVideoFetchCard(
+                                    key: ObjectKey(widget.entries[index]),
+                                    entry: widget.entries[index],
+                                    onSelectionChanged:
+                                        widget.onSelectionChanged,
+                                    onRemove: () =>
+                                        widget.onRemove(widget.entries[index]),
+                                    onRetry: () =>
+                                        widget.onRetry(widget.entries[index]),
                                   ),
-                                  entry: widget.entries[index],
-                                  onOutputDirectoryChanged: (directory) =>
-                                      widget.onVideoDirectoryChanged(
-                                        widget.entries[index].draft!,
-                                        directory,
-                                      ),
-                                  onSelectionChanged: widget.onSelectionChanged,
-                                  selected:
-                                      widget.selected ==
-                                      widget.entries[index].draft,
-                                  onSelect: () => widget.onSelect(
-                                    widget.entries[index].draft!,
-                                  ),
-                                  onRemove: () =>
-                                      widget.onRemove(widget.entries[index]),
-                                )
-                              : HomeVideoFetchCard(
-                                  key: ObjectKey(widget.entries[index]),
-                                  entry: widget.entries[index],
-                                  onSelectionChanged: widget.onSelectionChanged,
-                                  onRemove: () =>
-                                      widget.onRemove(widget.entries[index]),
-                                  onRetry: () =>
-                                      widget.onRetry(widget.entries[index]),
-                                ),
-                        ),
+                          ),
+                        ],
                       ],
-                    ],
+                    ),
                   ),
                 ),
               );

@@ -30,6 +30,7 @@ void main() {
       expect(input.autoBestAudio, isTrue);
 
       await chooseQuality(tester, '160 kbps');
+      await tester.ensureVisible(find.byType(Switch).first);
       await tester.tap(find.byType(Switch).first);
       await tester.pumpAndSettle();
       expect(input.autoBestAudio, isTrue);

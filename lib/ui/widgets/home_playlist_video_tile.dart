@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 import '../pages/home_video_entry.dart';
 import 'home_download_checkbox.dart';
 import 'home_video_thumbnail.dart';
+import 'previous_video_download_warning.dart';
 
 class HomePlaylistVideoTile extends StatelessWidget {
   const HomePlaylistVideoTile({
@@ -42,16 +43,23 @@ class HomePlaylistVideoTile extends StatelessWidget {
           maxLines: 2,
           overflow: TextOverflow.ellipsis,
         ),
-        subtitle: Text(
-          error ??
-              (draft != null
-                  ? '${draft.qualityLabel} · ${selected ? 'Editing settings' : 'View settings'}'
-                  : entry.fetching
-                  ? 'Fetching video information…'
-                  : 'Waiting for video information…'),
-          style: error == null
-              ? null
-              : TextStyle(color: Theme.of(context).colorScheme.error),
+        subtitle: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text(
+              error ??
+                  (draft != null
+                      ? '${draft.qualityLabel} · ${selected ? 'Editing settings' : 'View settings'}'
+                      : entry.fetching
+                      ? 'Fetching video information…'
+                      : 'Waiting for video information…'),
+              style: error == null
+                  ? null
+                  : TextStyle(color: Theme.of(context).colorScheme.error),
+            ),
+            if (draft != null)
+              PreviousVideoDownloadWarning(url: draft.info.pageUrl),
+          ],
         ),
         onTap: draft == null ? null : onSelect,
         trailing: Row(

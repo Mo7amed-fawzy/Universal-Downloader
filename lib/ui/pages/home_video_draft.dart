@@ -43,6 +43,12 @@ class HomeVideoDraft {
     input.outputDirectory,
     input.subtitle,
     input.downloadSubtitleFile,
+    input.keepSpeech,
+    input.keepMusic,
+    input.keepEffects,
+    input.speechRemovalStrength,
+    input.musicRemovalStrength,
+    input.effectsRemovalStrength,
   );
 
   bool get isCustom => _configuration != _defaults;

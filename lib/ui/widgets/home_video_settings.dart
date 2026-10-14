@@ -1,6 +1,8 @@
 import 'package:flutter/material.dart';
 
+import '../../core/models/audio_output_format.dart';
 import '../pages/home_video_draft.dart';
+import 'home_download_actions.dart';
 import 'format_pickers.dart';
 import 'media_info_card.dart';
 import 'output_folder_row.dart';
@@ -12,6 +14,7 @@ class HomeVideoSettings extends StatelessWidget {
     required this.preferredLanguage,
     required this.onChanged,
     required this.onDownload,
+    required this.onDownloadAudio,
     this.onClearSelection,
   });
 
@@ -19,6 +22,7 @@ class HomeVideoSettings extends StatelessWidget {
   final String preferredLanguage;
   final VoidCallback onChanged;
   final VoidCallback? onDownload;
+  final ValueChanged<AudioOutputFormat>? onDownloadAudio;
   final VoidCallback? onClearSelection;
 
   @override
@@ -45,17 +49,9 @@ class HomeVideoSettings extends StatelessWidget {
         const SizedBox(height: 16),
         Align(
           alignment: Alignment.centerRight,
-          child: FilledButton.icon(
-            onPressed: onDownload,
-            icon: const Icon(Icons.download),
-            label: const Text('Download'),
-            style: FilledButton.styleFrom(
-              minimumSize: const Size(220, 52),
-              textStyle: const TextStyle(
-                fontSize: 16,
-                fontWeight: FontWeight.w600,
-              ),
-            ),
+          child: HomeDownloadActions(
+            onDownload: onDownload,
+            onDownloadAudio: onDownloadAudio,
           ),
         ),
       ],
