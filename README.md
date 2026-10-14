@@ -17,6 +17,7 @@ formats, and downloads the best video stream plus your preferred audio track
 - Provider-agnostic architecture: YouTube today, more providers (Facebook,
   Instagram, TikTok, X/Twitter, Reddit, Vimeo) and direct media URLs planned.
 - Per-language audio selection (e.g. prefer Arabic, fall back to English).
+- Independent Speech, Music, and Sound effects choices for the downloaded audio.
 - Video quality choices follow the fetched formats, including 144p/240p when available.
 - MP4/MKV container decision based on the actual codecs (stream copy, no
   re-encoding).
@@ -34,7 +35,11 @@ formats, and downloads the best video stream plus your preferred audio track
 - Linux x86_64 with a GTK 3 desktop environment and EGL graphics libraries;
   tested on Ubuntu 24.04.
 - The packaged app includes yt-dlp, FFmpeg, FFprobe, and Deno. No separate media
-  tool or Python installation is required.
+  tool or Python installation is required for ordinary downloads.
+- Separating Speech, Music, and Sound effects requires Python 3.10 or newer,
+  [ELUATE](https://github.com/anaxoniclabs/ELUATE), and its Bandit v2 model.
+  This optional model is downloaded separately and is about 450 MB. The model
+  weights are licensed under CC-BY-SA 4.0.
 - Building from source requires Flutter with Dart 3.12.2 or newer, the Flutter
   Linux build prerequisites, Python 3.11 or newer, and internet access for the
   first tool download. Python is used only during packaging.
@@ -180,6 +185,24 @@ resets its quality to **Best Available**. Choose a **Container**
 (Auto, MP4, or MKV), then use **Choose** under **Output Folder** to select where
 the file will be saved. Click **Download** to start.
 
+Expand **Keep in downloaded video** to adjust Speech, Music, and Sound effects.
+All three are kept by default. Each circular choice can be cleared to show a
+removal-strength slider, initially set to 100%. Lower values leave more of that
+sound in the video. Clearing all three at 100% creates a silent video without
+an AI model. For other combinations, install the
+optional audio separator in a Python environment and download its model once:
+
+```sh
+python3 -m venv "$HOME/.local/share/universal_downloader/audio-stems-venv"
+"$HOME/.local/share/universal_downloader/audio-stems-venv/bin/python" -m pip install 'eluate==0.0.3'
+"$HOME/.local/share/universal_downloader/audio-stems-venv/bin/eluate" setup
+```
+
+Launch the app with `UNIVERSAL_DOWNLOADER_PYTHON` set to that environment's
+`bin/python` path. Audio separation keeps the chosen source language and copies
+the video stream while encoding the selected audio as AAC. Separation is
+approximate; overlapping sounds may leave traces or affect the voice.
+
 **Subtitles** defaults to **None** each time you fetch a video. To include
 captions, choose one of the available tracks and turn on **Add separate subtitle
 file** before downloading. The toggle defaults to off and resets on each fetch.
@@ -188,6 +211,22 @@ It is disabled while **None** is selected. Automatic
 captions are labeled **automatic** or **auto-translated**; subtitle language is
 independent of audio language. Videos without supported subtitle tracks keep
 this field disabled.
+
+Use **Download audio** beside **Download** to save only the selected audio track
+as MP3, M4A, or FLAC. The chosen language, audio quality, output folder, and
+sound-removal settings carry over. YouTube downloads its separate audio stream
+without downloading the video stream when one is available; direct media links
+extract audio from the source file. The three output formats are encoded with
+FFmpeg, and the final file is checked to contain audio without video.
+In Multi-download mode, **Download audio** also appears beside the ordinary
+batch and playlist download buttons. Choose an output format to queue audio
+for every checked video in that group.
+In a playlist, **Remove downloaded** clears videos with completed video
+downloads from the prepared list after confirmation. It does not delete files
+or download history.
+If the same video is also in the regular multi-download list below, **Remove
+duplicates** removes the regular copy and keeps the playlist copy. A notice
+names the other list when a duplicate video is fetched.
 
 ![Subtitle selection with Arabic captions selected](docs/screenshots/subtitles.png)
 

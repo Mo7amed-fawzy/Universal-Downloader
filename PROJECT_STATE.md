@@ -1,6 +1,132 @@
 # Universal Downloader: Project State
 
-Last updated: 2026-10-13 (Africa/Cairo).
+Last updated: 2026-10-14 (Africa/Cairo).
+
+## Current Checkpoint: Equal Cards and Cross-List Duplicates
+
+Regular multi-download cards in the horizontal row now share the tallest
+card's height, including cards with a previous-download warning or pending
+metadata. Desktop download-history cards have a common minimum height; narrow
+windows can grow cards to fit their contents. When a prepared video also exists
+in another list, Home shows a notice naming the playlist or the regular
+multi-download list. Playlist cards offer **Remove duplicates (N)** to remove
+matching regular cards below while keeping the playlist copies. The existing
+**Remove downloaded** action still removes completed entries from its playlist
+after confirmation.
+
+Verified on 2026-10-14: 86 Home, navigation and quality widget tests plus 13
+audio/stem and local audio-export tests passed, including both duplicate-fetch
+orders, duplicate removal, equal card heights and narrow enlarged-text layouts.
+Flutter analysis and diff whitespace checks passed. No live desktop visual
+review or download was run. Next: inspect both card sections and the duplicate
+notice in the running Linux app.
+
+## Previous Checkpoint: Previous-Download Warning in Multi-Download
+
+Prepared regular batch cards and playlist rows now show **Already downloaded**
+for a matching completed video, even after the URL input clears. The warning
+opens the matching task in Downloads and follows the existing source-URL
+matching rules. Audio-only history and unfinished tasks do not count. Warnings
+refresh when the download manager changes; selection and downloads remain
+available.
+
+Verified on 2026-10-14: all 68 Home batch widget tests passed, including new
+regular/playlist warning and navigation checks in both brightness modes, plus
+an audio-only exclusion check. Flutter analysis and diff whitespace checks
+passed. No live desktop visual review or download was run for this change.
+Next: review the warning in the running Linux app.
+
+## Previous Checkpoint: Audio Download Cards and Bulk Actions
+
+Audio-only queue cards now have an audio icon, a subtle accent surface and
+border, a headphones badge, and a matching progress bar. The original
+thumbnail keeps its placement and 120×68 size on desktop. Multi-download mode
+now offers the MP3/M4A/FLAC **Download audio** menu beside both regular batch
+and playlist download buttons. It queues each checked, prepared item using
+that item's language, quality, folder and sound-removal choices. Fully muted
+items remain in the batch with a correction message while valid items queue.
+README describes bulk audio downloads.
+
+Verified on 2026-10-14: the Home batch, audio card and progress widget tests
+passed, including regular and playlist selection, mixed muted items, desktop
+thumbnail size, narrow layout, enlarged text and both theme brightnesses.
+Flutter analysis and diff whitespace checks passed. No live download or Linux
+desktop visual review was run for these UI changes. Next: review the new card
+and bulk buttons in the running Linux app, then try a short live audio download.
+
+## Previous Checkpoint: Audio-Only Downloads
+
+The selected video's editor now has a **Download audio** menu beside the main
+Download button, offering MP3, M4A and FLAC. Audio-only tasks retain the chosen
+language, source quality, folder and stem-removal settings; their output format
+survives task recovery. YouTube requests the selected audio stream directly
+when available, while direct links extract audio from the downloaded source.
+FFmpeg encodes the chosen format and ffprobe requires audio without video before
+publication. Audio-only completions do not trigger the already-downloaded-video
+warning. The existing video download path remains unchanged. README documents
+the new menu.
+
+Verified on 2026-10-14: focused Home, format/recovery/history, subtitle and
+media-pipeline tests passed; local FFmpeg tests produced valid MP3, M4A and
+FLAC files. Provider integration tests passed using a local audio source for
+YouTube's downloader and a localhost video server for direct links. Flutter
+analysis, Python bridge syntax, diff whitespace and a Linux debug build passed.
+The integration suite also passed its network metadata check, but no live
+YouTube audio-only transfer or model-based stem separation was performed.
+Next: try one live short YouTube audio-only download and, after installing
+ELUATE, one audio-only file with stem removal.
+
+## Previous Checkpoint: Collapsible Audio Removal Controls
+
+The Home audio section is collapsed by default. Expanding it reveals circular
+Speech, Music and Sound effects choices; all start checked. Unchecking one
+shows its removal-strength slider directly underneath at 100%. Strengths are
+stored with queued tasks, restored after restart, applied to playlist siblings
+when settings are copied, and passed as per-stem gains to the Bandit v2 audio
+mix. At 0% removal, that stem remains unchanged; all three unchecked at 100%
+still use the model-free silent-video path. README describes the controls.
+
+Verified on 2026-10-14: 81 audio, Home, tab, quality and media-pipeline tests
+passed, including the network metadata and local FFmpeg checks. Flutter analysis,
+Python script syntax and diff whitespace checks passed. The optional ELUATE
+model and soundfile package are absent here, so live stem separation and a
+processed download remain unverified. Next: check the controls visually in the
+Linux window and run an end-to-end model sample after installing ELUATE.
+
+## Previous Checkpoint: Home State Across Window Resizes
+
+Resizing across the 600 px compact/desktop breakpoint no longer recreates the
+tab content. AppScaffold now keeps the body under the same Row, Expanded and
+SafeArea ancestors at both widths, changing only the navigation rail and safe
+area flags. This preserves prepared videos and their settings in both batch and
+single modes when enlarging or shrinking the window.
+
+Verified on 2026-10-14: regression tests reproduced the lost HomePage state
+before the fix and pass after it in both resize directions; a single-video
+resize test also passes. The 68 focused tab, Home and compact-layout widget
+tests, Flutter analysis and diff whitespace check pass. No live desktop resize
+was performed. Next: check the behavior in the running Linux window.
+
+## Previous Checkpoint: Selective Audio Stems
+
+Home now offers independent Speech, Music and Sound effects choices, all kept
+by default. Changed selections persist with queued tasks and carry across
+playlist settings. The selected language/quality stream feeds optional Bandit
+v2 separation through ELUATE's public speech/SFX API; the music component is
+reconstructed as the original audio minus those stems. Chosen components are
+mixed and encoded to AAC while video packets remain copied. Clearing all three
+copies only video without requiring the model. Processing progress appears in
+Downloads. Linux users must separately install Python/ELUATE and run `eluate
+setup`; README has the commands and model licensing. The normal download path
+is unchanged.
+
+Verified locally: Flutter analysis; audio-selection, recovery, focused YouTube
+merge, quality, layout, media publication and FFmpeg mute/merge/verification
+tests passed. Python bridge syntax, diff whitespace, and a Linux debug build
+passed; the built Flutter assets include the Python bridge. ELUATE and its model
+are absent on this machine, so actual three-stem inference and a live processed
+download remain unverified. Next: install the optional model and check a short
+local speech/music/effects sample end to end.
 
 Commit review on 2026-10-13 grouped theme persistence, bottom-navigation motion,
 Home alignment, the Linux icon fix and startup animation into separate commits.
@@ -8,7 +134,7 @@ Application sources were unchanged during the review; the checks recorded below
 were not rerun for this commit-only request. Local `output/` experiments and the
 machine-specific desktop launcher remain outside version control.
 
-## Current Checkpoint: Home Section Vertical Alignment
+## Previous Checkpoint: Home Section Vertical Alignment
 
 Empty Home now places the headline, URL/playlist card and hint together near
 the visual center of the page. HomeContentLayout measures the available height,
