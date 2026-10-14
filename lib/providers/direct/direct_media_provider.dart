@@ -2,12 +2,15 @@ import 'dart:io';
 
 import '../../core/errors/downloader_exceptions.dart';
 import '../../core/models/audio_format.dart';
+import '../../core/models/audio_output_format.dart';
 import '../../core/models/download_options.dart';
 import '../../core/models/media_info.dart';
 import '../../core/models/video_format.dart';
 import '../../core/process/cancel_token.dart';
 import '../../core/process/command_runner.dart';
 import '../../core/process/process_runner.dart';
+import '../../core/services/audio_exporter.dart';
+import '../../core/services/audio_stem_processor.dart';
 import '../../core/services/log_service.dart';
 import '../../core/services/media_assembler.dart';
 import '../../core/services/media_file_publisher.dart';
@@ -24,6 +27,7 @@ class DirectMediaProvider
     implements DownloaderProvider, ToolConfigurableProvider {
   DirectMediaProvider({
     required this.ffprobePath,
+    this.ffmpegPath = 'ffmpeg',
     CommandRunner? runner,
     DownloadRepository? repository,
     LogService? log,
@@ -33,12 +37,14 @@ class DirectMediaProvider
 
   final CommandRunner runner;
   String ffprobePath;
+  String ffmpegPath;
   final DownloadRepository repository;
   final LogService log;
 
   @override
   void configureTools(MediaTools tools) {
     ffprobePath = tools.ffprobe;
+    ffmpegPath = tools.ffmpeg;
   }
 
   @override
@@ -144,7 +150,18 @@ class DirectMediaProvider
     final tmpFile = File('${tempDir.path}/direct.tmp');
 
     try {
-      onPhase(DownloadTaskState.downloadingVideo);
+      if (options.audioOutputFormat != null && options.isMuted) {
+        throw DownloadFailedException('No audio remains to export.');
+      }
+      final stemProcessor = AudioStemProcessor(runner: runner);
+      if (options.needsAudioProcessing && !options.isMuted) {
+        await stemProcessor.ensureAvailable(cancelToken);
+      }
+      onPhase(
+        options.audioOutputFormat == null
+            ? DownloadTaskState.downloadingVideo
+            : DownloadTaskState.downloadingAudio,
+      );
       log.info('Downloading direct file from ${media.pageUrl}');
       await const DirectFileDownloader().download(
         media.pageUrl,
@@ -153,22 +170,120 @@ class DirectMediaProvider
         cancelToken,
       );
 
-      onPhase(DownloadTaskState.verifying);
+      if (options.audioOutputFormat case final format?) {
+        var source = tmpFile;
+        if (options.needsAudioProcessing) {
+          onPhase(DownloadTaskState.processingAudio);
+          source = await stemProcessor.process(
+            source: source,
+            workspace: tempDir,
+            ffmpegPath: ffmpegPath,
+            options: options,
+            onProgress: onProgress,
+            cancelToken: cancelToken,
+          );
+        }
+        onPhase(DownloadTaskState.processingAudio);
+        final exported =
+            await AudioExporter(ffmpegPath: ffmpegPath, runner: runner).export(
+              source: source,
+              workspace: tempDir,
+              format: format,
+              cancelToken: cancelToken,
+            );
+        onPhase(DownloadTaskState.verifying);
+        final assembler = MediaAssembler(
+          ffmpegPath: ffmpegPath,
+          ffprobePath: ffprobePath,
+          runner: runner,
+        );
+        final report = await assembler.verify(exported, expectVideo: false);
+        if (!report.passed) {
+          throw VerificationException(
+            'The audio file failed verification.',
+            details: report.failures.join('\n'),
+          );
+        }
+        final outputPath = repository.buildUniqueOutputPath(
+          outputDirectory: options.outputDirectory,
+          baseName: options.title,
+          extension: format.id,
+          overwrite: options.overwrite,
+        );
+        final outputFile = await const MediaFilePublisher().publish(
+          exported,
+          outputPath,
+          cancelToken,
+        );
+        final result = DownloadTaskResult(outputFile: outputFile, merged: true);
+        await repository.saveVerifiedResult(taskId, result);
+        return result;
+      }
+
       final ext = media.videoFormats.isEmpty
           ? 'mp4'
           : (media.videoFormats.first.container ?? 'mp4');
       final outputPath = repository.buildUniqueOutputPath(
         outputDirectory: options.outputDirectory,
         baseName: options.title,
-        extension: ext,
+        extension:
+            options.needsAudioProcessing && !options.isMuted && ext != 'mp4'
+            ? 'mkv'
+            : ext,
         overwrite: options.overwrite,
       );
       final assembler = MediaAssembler(
-        ffmpegPath: '/nonexistent',
+        ffmpegPath: ffmpegPath,
         ffprobePath: ffprobePath,
         runner: runner,
       );
-      final report = await assembler.verify(tmpFile);
+      var mediaFile = tmpFile;
+      if (options.needsAudioProcessing) {
+        onPhase(DownloadTaskState.merging);
+        final processedExtension = options.isMuted
+            ? ext
+            : ext == 'mp4'
+            ? 'mp4'
+            : 'mkv';
+        final processed = '${tempDir.path}/processed.$processedExtension';
+        if (options.isMuted) {
+          mediaFile = await assembler.merge(
+            tmpFile,
+            null,
+            processed,
+            cancelToken: cancelToken,
+            includeAudio: false,
+          );
+        } else {
+          final source = await assembler.merge(
+            tmpFile,
+            null,
+            '${tempDir.path}/source.$processedExtension',
+            cancelToken: cancelToken,
+          );
+          onPhase(DownloadTaskState.processingAudio);
+          final selectedAudio = await stemProcessor.process(
+            source: source,
+            workspace: tempDir,
+            ffmpegPath: ffmpegPath,
+            options: options,
+            onProgress: onProgress,
+            cancelToken: cancelToken,
+          );
+          onPhase(DownloadTaskState.merging);
+          mediaFile = await assembler.merge(
+            source,
+            selectedAudio,
+            processed,
+            cancelToken: cancelToken,
+          );
+        }
+      }
+      onPhase(DownloadTaskState.verifying);
+      final report = await assembler.verify(
+        mediaFile,
+        expectAudio: !options.isMuted,
+      );
       if (!report.passed) {
         throw VerificationException(
           'The downloaded file failed verification. It was kept for inspection.',
@@ -178,12 +293,15 @@ class DirectMediaProvider
 
       cancelToken.throwIfCancelled();
       final outputFile = await const MediaFilePublisher().publish(
-        tmpFile,
+        mediaFile,
         outputPath,
         cancelToken,
       );
       log.info('Direct download completed: ${outputFile.path}');
-      final result = DownloadTaskResult(outputFile: outputFile, merged: false);
+      final result = DownloadTaskResult(
+        outputFile: outputFile,
+        merged: options.needsAudioProcessing,
+      );
       await repository.saveVerifiedResult(taskId, result);
       return result;
     } catch (e) {

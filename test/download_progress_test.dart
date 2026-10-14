@@ -164,7 +164,7 @@ void main() {
               find.byType(LinearProgressIndicator),
             )
             .value,
-        0,
+        isNull,
       );
       expect(find.textContaining('57.81'), findsNothing);
       task.setProgress(const DownloadProgress(percent: 2));

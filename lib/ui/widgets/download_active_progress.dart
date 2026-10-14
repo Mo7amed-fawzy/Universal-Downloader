@@ -12,12 +12,14 @@ class DownloadActiveProgress extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
+    final audioOnly = task.options.audioOutputFormat != null;
     final progress = task.progress;
     final percent = task.displayPercent;
     final paused = task.state == DownloadTaskState.paused;
     final stopping = paused || task.state == DownloadTaskState.pausing;
     final processing =
         task.state == DownloadTaskState.merging ||
+        task.state == DownloadTaskState.processingAudio ||
         task.state == DownloadTaskState.verifying;
     final stats = [
       if (progress.downloadedBytes != null)
@@ -33,6 +35,8 @@ class DownloadActiveProgress extends StatelessWidget {
     final details = processing
         ? task.state == DownloadTaskState.merging
               ? 'Merging video and audio...'
+              : task.state == DownloadTaskState.processingAudio
+              ? progress.statusLabel ?? 'Separating audio...'
               : 'Checking downloaded file...'
         : paused
         ? stats.isEmpty
@@ -59,7 +63,15 @@ class DownloadActiveProgress extends StatelessWidget {
         ClipRRect(
           borderRadius: BorderRadius.circular(4),
           child: LinearProgressIndicator(
-            value: processing ? null : (percent ?? 0) / 100,
+            color: audioOnly ? theme.colorScheme.secondary : null,
+            backgroundColor: audioOnly
+                ? theme.colorScheme.secondary.withValues(alpha: 0.14)
+                : null,
+            value: processing && task.state != DownloadTaskState.processingAudio
+                ? null
+                : percent == null
+                ? null
+                : percent / 100,
             minHeight: 8,
           ),
         ),

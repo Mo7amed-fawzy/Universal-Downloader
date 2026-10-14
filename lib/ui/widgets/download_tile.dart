@@ -9,6 +9,7 @@ import '../../downloads/download_task.dart';
 import '../../downloads/download_task_state.dart';
 import '../components/status_chip.dart';
 import 'download_active_progress.dart';
+import 'download_audio_title.dart';
 import 'download_task_actions.dart';
 import 'download_completed_status.dart';
 
@@ -112,69 +113,95 @@ class _DownloadTileState extends State<DownloadTile>
   Widget build(BuildContext context) {
     final task = widget.task;
     final theme = Theme.of(context);
+    final isAudioOnly = task.options.audioOutputFormat != null;
+    final scheme = theme.colorScheme;
     return ListenableBuilder(
       listenable: task,
       builder: (context, _) => Card(
-        child: Padding(
-          padding: const EdgeInsets.all(16),
-          child: Row(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              if (MediaQuery.sizeOf(context).width >= 600) ...[
-                _Thumbnail(task: task),
-                const SizedBox(width: 16),
-              ],
-              Expanded(
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Text(
-                      task.media.title,
-                      maxLines: 2,
-                      overflow: TextOverflow.ellipsis,
-                      style: theme.textTheme.titleMedium,
-                    ),
-                    const SizedBox(height: 6),
-                    Wrap(
-                      spacing: 8,
-                      runSpacing: 6,
-                      children: [
-                        StatusChip(
-                          label: task.providerName,
-                          icon: Icons.language,
-                          color: theme.colorScheme.primary,
+        color: isAudioOnly
+            ? Color.alphaBlend(
+                scheme.secondary.withValues(alpha: 0.06),
+                theme.cardTheme.color ?? scheme.surfaceContainerLow,
+              )
+            : null,
+        shape: isAudioOnly
+            ? RoundedRectangleBorder(
+                borderRadius: BorderRadius.circular(24),
+                side: BorderSide(
+                  color: scheme.secondary.withValues(alpha: 0.5),
+                ),
+              )
+            : null,
+        child: Container(
+          constraints: BoxConstraints(
+            minHeight: MediaQuery.sizeOf(context).width >= 800 ? 168 : 0,
+          ),
+          child: Padding(
+            padding: const EdgeInsets.all(16),
+            child: Row(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                if (MediaQuery.sizeOf(context).width >= 600) ...[
+                  _Thumbnail(task: task),
+                  const SizedBox(width: 16),
+                ],
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      if (isAudioOnly)
+                        DownloadAudioTitle(title: task.media.title)
+                      else
+                        Text(
+                          task.media.title,
+                          maxLines: 2,
+                          overflow: TextOverflow.ellipsis,
+                          style: theme.textTheme.titleMedium,
                         ),
-                        StatusChip(
-                          label: task.videoLabel,
-                          icon: Icons.high_quality_outlined,
-                          color: theme.colorScheme.secondary,
-                        ),
-                        if (task.audioLabel.isNotEmpty)
+                      const SizedBox(height: 6),
+                      Wrap(
+                        spacing: 8,
+                        runSpacing: 6,
+                        children: [
                           StatusChip(
-                            label: task.audioLabel,
-                            icon: Icons.music_note_outlined,
-                            color: theme.colorScheme.tertiary,
+                            label: task.providerName,
+                            icon: Icons.language,
+                            color: theme.colorScheme.primary,
                           ),
-                        if (task.options.subtitle != null)
                           StatusChip(
-                            label: task.options.subtitle!.label,
-                            icon: Icons.subtitles_outlined,
+                            label: task.videoLabel,
+                            icon: isAudioOnly
+                                ? Icons.headphones_rounded
+                                : Icons.high_quality_outlined,
                             color: theme.colorScheme.secondary,
                           ),
-                      ],
-                    ),
-                    const SizedBox(height: 12),
-                    _StateArea(task: task, fileMissing: _fileMissing),
-                  ],
+                          if (task.audioLabel.isNotEmpty)
+                            StatusChip(
+                              label: task.audioLabel,
+                              icon: Icons.music_note_outlined,
+                              color: theme.colorScheme.tertiary,
+                            ),
+                          if (task.options.subtitle != null)
+                            StatusChip(
+                              label: task.options.subtitle!.label,
+                              icon: Icons.subtitles_outlined,
+                              color: theme.colorScheme.secondary,
+                            ),
+                        ],
+                      ),
+                      const SizedBox(height: 12),
+                      _StateArea(task: task, fileMissing: _fileMissing),
+                    ],
+                  ),
                 ),
-              ),
-              const SizedBox(width: 8),
-              DownloadTaskActions(
-                task: task,
-                fileMissing: _fileMissing,
-                openDownload: _openDownload,
-              ),
-            ],
+                const SizedBox(width: 8),
+                DownloadTaskActions(
+                  task: task,
+                  fileMissing: _fileMissing,
+                  openDownload: _openDownload,
+                ),
+              ],
+            ),
           ),
         ),
       ),
@@ -215,6 +242,7 @@ class _StateArea extends StatelessWidget {
       case DownloadTaskState.downloadingCover:
       case DownloadTaskState.downloadingSubtitles:
       case DownloadTaskState.merging:
+      case DownloadTaskState.processingAudio:
       case DownloadTaskState.verifying:
         return DownloadActiveProgress(task: task);
       case DownloadTaskState.completed:

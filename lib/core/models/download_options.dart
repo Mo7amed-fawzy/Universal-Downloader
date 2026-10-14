@@ -1,3 +1,4 @@
+import 'audio_output_format.dart';
 import 'subtitle_track.dart';
 
 /// Options that drive a single download operation.
@@ -13,6 +14,13 @@ class DownloadOptions {
     this.audioFormatId,
     this.audioLanguage,
     this.subtitle,
+    this.keepSpeech = true,
+    this.keepMusic = true,
+    this.keepEffects = true,
+    this.speechRemovalStrength = 1,
+    this.musicRemovalStrength = 1,
+    this.effectsRemovalStrength = 1,
+    this.audioOutputFormat,
     this.overwrite = false,
     this.containerPreference = ContainerPreference.auto,
   });
@@ -37,6 +45,24 @@ class DownloadOptions {
   final String? audioLanguage;
 
   final SubtitleTrack? subtitle;
+
+  final bool keepSpeech;
+  final bool keepMusic;
+  final bool keepEffects;
+
+  final double speechRemovalStrength;
+  final double musicRemovalStrength;
+  final double effectsRemovalStrength;
+  final AudioOutputFormat? audioOutputFormat;
+
+  double get speechLevel => keepSpeech ? 1 : 1 - speechRemovalStrength;
+  double get musicLevel => keepMusic ? 1 : 1 - musicRemovalStrength;
+  double get effectsLevel => keepEffects ? 1 : 1 - effectsRemovalStrength;
+
+  bool get needsAudioProcessing =>
+      speechLevel < 1 || musicLevel < 1 || effectsLevel < 1;
+
+  bool get isMuted => speechLevel == 0 && musicLevel == 0 && effectsLevel == 0;
 
   final bool overwrite;
 

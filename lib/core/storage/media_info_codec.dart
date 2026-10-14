@@ -1,6 +1,7 @@
 import 'dart:convert';
 
 import '../models/audio_format.dart';
+import '../models/audio_output_format.dart';
 import '../models/download_options.dart';
 import '../models/media_info.dart';
 import '../models/subtitle_track.dart';
@@ -116,6 +117,13 @@ class MediaInfoCodec {
     'subtitle': options.subtitle == null
         ? null
         : _subtitleJson(options.subtitle!),
+    'keepSpeech': options.keepSpeech,
+    'keepMusic': options.keepMusic,
+    'keepEffects': options.keepEffects,
+    'speechRemovalStrength': options.speechRemovalStrength,
+    'musicRemovalStrength': options.musicRemovalStrength,
+    'effectsRemovalStrength': options.effectsRemovalStrength,
+    'audioOutputFormat': options.audioOutputFormat?.id,
     'overwrite': options.overwrite,
     'container': switch (options.containerPreference) {
       ContainerPreference.auto => 'auto',
@@ -139,6 +147,18 @@ class MediaInfoCodec {
       audioFormatId: json['audioFormatId'] as String?,
       audioLanguage: json['audioLanguage'] as String?,
       subtitle: subtitle == null ? null : _subtitle(_object(subtitle)),
+      keepSpeech: json['keepSpeech'] != false,
+      keepMusic: json['keepMusic'] != false,
+      keepEffects: json['keepEffects'] != false,
+      speechRemovalStrength:
+          (json['speechRemovalStrength'] as num?)?.toDouble() ?? 1,
+      musicRemovalStrength:
+          (json['musicRemovalStrength'] as num?)?.toDouble() ?? 1,
+      effectsRemovalStrength:
+          (json['effectsRemovalStrength'] as num?)?.toDouble() ?? 1,
+      audioOutputFormat: AudioOutputFormatDetails.fromId(
+        json['audioOutputFormat'] as String?,
+      ),
       overwrite: json['overwrite'] as bool,
       containerPreference: switch (json['container']) {
         'mp4' => ContainerPreference.mp4,

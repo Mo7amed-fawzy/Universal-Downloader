@@ -12,6 +12,20 @@ class HomeInput {
   String outputDirectory = '';
   SubtitleTrack? subtitle;
   bool downloadSubtitleFile = false;
+  bool keepSpeech = true;
+  bool keepMusic = true;
+  bool keepEffects = true;
+  double speechRemovalStrength = 1;
+  double musicRemovalStrength = 1;
+  double effectsRemovalStrength = 1;
+
+  bool get isMuted =>
+      !keepSpeech &&
+      !keepMusic &&
+      !keepEffects &&
+      speechRemovalStrength == 1 &&
+      musicRemovalStrength == 1 &&
+      effectsRemovalStrength == 1;
 
   SubtitleTrack? get subtitleToDownload =>
       downloadSubtitleFile ? subtitle : null;
@@ -54,4 +68,19 @@ class HomeInput {
 
   void selectDownloadSubtitleFile(bool value) =>
       downloadSubtitleFile = value && subtitle != null;
+
+  void selectKeepSpeech(bool value) => keepSpeech = value;
+
+  void selectKeepMusic(bool value) => keepMusic = value;
+
+  void selectKeepEffects(bool value) => keepEffects = value;
+
+  void selectSpeechRemovalStrength(double value) =>
+      speechRemovalStrength = value.clamp(0, 1);
+
+  void selectMusicRemovalStrength(double value) =>
+      musicRemovalStrength = value.clamp(0, 1);
+
+  void selectEffectsRemovalStrength(double value) =>
+      effectsRemovalStrength = value.clamp(0, 1);
 }

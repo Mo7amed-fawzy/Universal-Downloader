@@ -5,18 +5,21 @@ import 'package:crypto/crypto.dart';
 
 import '../../core/errors/downloader_exceptions.dart';
 import '../../core/models/audio_format.dart';
+import '../../core/models/audio_output_format.dart';
 import '../../core/models/download_options.dart';
 import '../../core/models/media_info.dart';
 import '../../core/process/cancel_token.dart';
 import '../../core/process/command_runner.dart';
 import '../../core/process/process_runner.dart';
 import '../../core/process/yt_dlp_progress_parser.dart';
+import '../../core/services/audio_exporter.dart';
+import '../../core/services/audio_stem_processor.dart';
 import '../../core/services/log_service.dart';
 import '../../core/services/media_assembler.dart';
 import '../../core/services/media_file_publisher.dart';
 import '../../core/tools/media_tools.dart';
-import '../../downloads/download_repository.dart';
 import '../../downloads/download_progress.dart';
+import '../../downloads/download_repository.dart';
 import '../../downloads/download_retry_policy.dart';
 import '../../downloads/download_task_state.dart';
 import '../downloader_provider.dart';
@@ -173,9 +176,28 @@ class YoutubeProvider implements DownloaderProvider, ToolConfigurableProvider {
     final progressiveId = audioFormat?.progressiveFormatId;
 
     final videoFormat = media.videoFormatById(options.videoFormatId);
+    final stemProcessor = AudioStemProcessor(runner: _runner);
 
     File? audioTmp;
     try {
+      if (options.audioOutputFormat != null && options.isMuted) {
+        throw DownloadFailedException('No audio remains to export.');
+      }
+      if (options.needsAudioProcessing && !options.isMuted) {
+        await stemProcessor.ensureAvailable(cancelToken);
+      }
+      if (options.audioOutputFormat != null) {
+        return await _downloadAudioOnly(
+          media,
+          options,
+          tempDir,
+          audioFormat,
+          stemProcessor,
+          onPhase: onPhase,
+          onProgress: onProgress,
+          cancelToken: cancelToken,
+        );
+      }
       File? coverTmp;
       final thumbnail = media.thumbnail;
       if (thumbnail != null) {
@@ -265,7 +287,7 @@ class YoutubeProvider implements DownloaderProvider, ToolConfigurableProvider {
       }
 
       // 2. Download the selected audio stream.
-      if (audioFormatId != null) {
+      if (audioFormatId != null && !options.isMuted) {
         cancelToken.throwIfCancelled();
         onPhase(DownloadTaskState.downloadingAudio);
         final sourceAudioId = progressiveId ?? audioFormatId;
@@ -304,7 +326,65 @@ class YoutubeProvider implements DownloaderProvider, ToolConfigurableProvider {
       }
 
       File outputFile;
-      if (audioTmp != null) {
+      if (options.needsAudioProcessing) {
+        cancelToken.throwIfCancelled();
+        final extension = audioTmp != null
+            ? _assembler.decideContainer(
+                videoFormat: videoFormat,
+                audioCodec: audioFormat?.codec,
+                preference: options.containerPreference,
+              )
+            : (videoFormat?.container?.isNotEmpty ?? false)
+            ? videoFormat!.container!
+            : 'mp4';
+        final outputExtension = extension != 'mp4' && !options.isMuted
+            ? 'mkv'
+            : coverTmp != null && extension != 'mp4'
+            ? 'mkv'
+            : extension;
+        final outputPath = _repository.buildUniqueOutputPath(
+          outputDirectory: options.outputDirectory,
+          baseName: options.title,
+          extension: outputExtension,
+          overwrite: options.overwrite,
+        );
+        if (options.isMuted) {
+          onPhase(DownloadTaskState.merging);
+          outputFile = await _assembler.merge(
+            videoTmp,
+            null,
+            outputPath,
+            cover: coverTmp,
+            cancelToken: cancelToken,
+            includeAudio: false,
+          );
+        } else {
+          onPhase(DownloadTaskState.merging);
+          final source = await _assembler.merge(
+            videoTmp,
+            audioTmp,
+            '${tempDir.path}/source.$outputExtension',
+            cancelToken: cancelToken,
+          );
+          onPhase(DownloadTaskState.processingAudio);
+          final selectedAudio = await stemProcessor.process(
+            source: source,
+            workspace: tempDir,
+            ffmpegPath: ffmpegPath,
+            options: options,
+            onProgress: onProgress,
+            cancelToken: cancelToken,
+          );
+          onPhase(DownloadTaskState.merging);
+          outputFile = await _assembler.merge(
+            source,
+            selectedAudio,
+            outputPath,
+            cover: coverTmp,
+            cancelToken: cancelToken,
+          );
+        }
+      } else if (audioTmp != null) {
         // 3. Merge with ffmpeg using stream copy.
         cancelToken.throwIfCancelled();
         onPhase(DownloadTaskState.merging);
@@ -376,6 +456,7 @@ class YoutubeProvider implements DownloaderProvider, ToolConfigurableProvider {
         expectedAudioLanguage: options.audioLanguage,
         expectedHeight: videoFormat?.height,
         expectCover: coverTmp != null,
+        expectAudio: !options.isMuted,
       );
       if (!report.passed) {
         throw VerificationException(
@@ -405,7 +486,7 @@ class YoutubeProvider implements DownloaderProvider, ToolConfigurableProvider {
       _log.info('Download completed: ${outputFile.path}');
       final result = DownloadTaskResult(
         outputFile: outputFile,
-        merged: audioTmp != null,
+        merged: audioTmp != null || options.needsAudioProcessing,
         sidecarFiles: sidecarFiles,
       );
       await _repository.saveVerifiedResult(taskId, result);
@@ -419,6 +500,107 @@ class YoutubeProvider implements DownloaderProvider, ToolConfigurableProvider {
       _log.error('Download failed (task $taskId): $e');
       rethrow;
     }
+  }
+
+  Future<DownloadTaskResult> _downloadAudioOnly(
+    MediaInfo media,
+    DownloadOptions options,
+    Directory tempDir,
+    AudioFormat? audioFormat,
+    AudioStemProcessor stemProcessor, {
+    required PhaseCallback onPhase,
+    required ProgressCallback onProgress,
+    required CancelToken cancelToken,
+  }) async {
+    final format = options.audioOutputFormat!;
+    final progressiveId = audioFormat?.progressiveFormatId;
+    final selectedAudioId = progressiveId ?? options.audioFormatId;
+    final sourceId = selectedAudioId ?? options.videoFormatId;
+    final extractorArgs = selectedAudioId == null
+        ? YoutubeExtractor.downloadBaseArgs()
+        : progressiveId != null
+        ? YoutubeExtractor.hlsDownloadBaseArgs()
+        : YoutubeExtractor.downloadAudioBaseArgs();
+    onPhase(DownloadTaskState.downloadingAudio);
+    var source = File('${tempDir.path}/audio-source.tmp');
+    try {
+      source = await _downloadStream(
+        media.pageUrl,
+        sourceId,
+        source,
+        cancelToken,
+        onProgress,
+        extractorArgs: extractorArgs,
+      );
+    } on DownloadFailedException catch (error) {
+      if (progressiveId != null) rethrow;
+      final remappedId = await _remapFormatId(
+        url: media.pageUrl,
+        originalFormatId: sourceId,
+        targetLanguage: options.audioLanguage,
+        targetAudio: audioFormat,
+        targetHeight: selectedAudioId == null
+            ? media.videoFormatById(sourceId)?.height
+            : null,
+        isVideo: selectedAudioId == null,
+      );
+      if (remappedId == null || remappedId == sourceId) rethrow;
+      _log.info('Audio source download failed, trying $remappedId: $error');
+      source = await _downloadStream(
+        media.pageUrl,
+        remappedId,
+        source,
+        cancelToken,
+        onProgress,
+        extractorArgs: extractorArgs,
+      );
+    }
+    if (options.needsAudioProcessing) {
+      onPhase(DownloadTaskState.processingAudio);
+      source = await stemProcessor.process(
+        source: source,
+        workspace: tempDir,
+        ffmpegPath: ffmpegPath,
+        options: options,
+        onProgress: onProgress,
+        cancelToken: cancelToken,
+      );
+    }
+    onPhase(DownloadTaskState.processingAudio);
+    final exported =
+        await AudioExporter(ffmpegPath: ffmpegPath, runner: _runner).export(
+          source: source,
+          workspace: tempDir,
+          format: format,
+          cancelToken: cancelToken,
+        );
+    onPhase(DownloadTaskState.verifying);
+    final report = await _assembler.verify(
+      exported,
+      expectedAudioLanguage: options.audioLanguage,
+      expectVideo: false,
+    );
+    if (!report.passed) {
+      throw VerificationException(
+        'The audio file failed verification.',
+        details: report.failures.join('\n'),
+      );
+    }
+    cancelToken.throwIfCancelled();
+    final outputPath = _repository.buildUniqueOutputPath(
+      outputDirectory: options.outputDirectory,
+      baseName: options.title,
+      extension: format.id,
+      overwrite: options.overwrite,
+    );
+    final outputFile = await const MediaFilePublisher().publish(
+      exported,
+      outputPath,
+      cancelToken,
+    );
+    final result = DownloadTaskResult(outputFile: outputFile, merged: true);
+    await _repository.saveVerifiedResult(options.taskId, result);
+    return result;
   }
 
   Future<File> _downloadStream(

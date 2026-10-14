@@ -58,6 +58,40 @@ void main() async {
 
   group('MediaAssembler (ffmpeg)', () {
     test(
+      'copies video without any audio when every sound is removed',
+      () async {
+        final tempDir = Directory.systemTemp.createTempSync('mute_test_');
+        addTearDown(() => tempDir.deleteSync(recursive: true));
+        final source = File('${tempDir.path}/source.mp4');
+        final created = await Process.run(ffmpeg!, [
+          '-y', '-hide_banner', '-loglevel', 'error',
+          '-f', 'lavfi', '-i', 'color=black:size=160x120:duration=1',
+          '-f', 'lavfi', '-i', 'sine=frequency=440:duration=1',
+          '-c:v', 'libx264', '-pix_fmt', 'yuv420p',
+          '-c:a', 'aac', '-shortest', source.path,
+        ]);
+        expect(created.exitCode, 0, reason: '${created.stderr}');
+        final assembler = MediaAssembler(
+          ffmpegPath: ffmpeg,
+          ffprobePath: ffprobe!,
+        );
+        final output = await assembler.merge(
+          source,
+          null,
+          '${tempDir.path}/silent.mp4',
+          includeAudio: false,
+        );
+        final report = await assembler.verify(output, expectAudio: false);
+        expect(report.passed, isTrue, reason: report.failures.join('\n'));
+        expect(report.hasVideo, isTrue);
+        expect(report.hasAudio, isFalse);
+      },
+      skip: (ffmpeg == null || ffprobe == null)
+          ? 'ffmpeg/ffprobe not on PATH'
+          : false,
+    );
+
+    test(
       'merges separate video and audio streams without re-encoding',
       () async {
         final tempDir = Directory.systemTemp.createTempSync('merge_test_');

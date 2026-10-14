@@ -85,6 +85,7 @@ class MediaAssembler {
     String outputPath, {
     File? cover,
     CancelToken? cancelToken,
+    bool includeAudio = true,
   }) async {
     final isMp4 = outputPath.endsWith('.mp4');
     if (cover != null && !isMp4 && !outputPath.endsWith('.mkv')) {
@@ -103,12 +104,11 @@ class MediaAssembler {
       if (cover != null && isMp4) ...['-i', cover.path],
       '-map',
       '0:V:0',
-      '-map',
-      audio == null ? '0:a:0' : '1:a:0',
+      if (includeAudio) ...['-map', audio == null ? '0:a:0' : '1:a:0'],
       if (cover != null && isMp4) ...['-map', '$coverInput:v:0'],
       '-c',
       'copy',
-      if (audio != null && cover == null) '-shortest',
+      if (includeAudio && audio != null && cover == null) '-shortest',
       if (cover != null && isMp4) ...['-disposition:v:1', 'attached_pic'],
       if (cover != null && !isMp4) ...[
         '-attach',
@@ -151,13 +151,15 @@ class MediaAssembler {
 
   /// Verifies [file] with ffprobe.
   ///
-  /// Checks: file exists, size > 0, at least one video stream and one audio
-  /// stream, and (when requested) that the audio stream language matches.
+  /// Checks: file exists, size > 0, video and the expected audio presence,
+  /// and (when requested) that the audio stream language matches.
   Future<VerificationReport> verify(
     File file, {
     String? expectedAudioLanguage,
     int? expectedHeight,
     bool expectCover = false,
+    bool expectAudio = true,
+    bool expectVideo = true,
   }) async {
     if (!file.existsSync() || file.lengthSync() == 0) {
       return const VerificationReport(
@@ -174,10 +176,7 @@ class MediaAssembler {
       file.path,
     ];
 
-    final result = await runner.run(
-      executable: ffprobePath,
-      arguments: args,
-    );
+    final result = await runner.run(executable: ffprobePath, arguments: args);
 
     if (!result.success) {
       return VerificationReport(
@@ -221,13 +220,20 @@ class MediaAssembler {
 
       final size = _parseInt(format['size']) ?? 0;
 
-      if (!hasVideo) failures.add('No video stream found.');
-      if (!hasAudio) failures.add('No audio stream found.');
+      if (expectVideo && !hasVideo) {
+        failures.add('No video stream found.');
+      }
+      if (!expectVideo && hasVideo) {
+        failures.add('Unexpected video stream found.');
+      }
+      if (expectAudio && !hasAudio) failures.add('No audio stream found.');
+      if (!expectAudio && hasAudio) {
+        failures.add('Unexpected audio stream found.');
+      }
       if (expectCover && !hasCover) failures.add('No embedded cover found.');
       if (size <= 0) failures.add('Output file has zero size.');
 
-      if (expectedAudioLanguage != null &&
-          expectedAudioLanguage.isNotEmpty) {
+      if (expectedAudioLanguage != null && expectedAudioLanguage.isNotEmpty) {
         final actual = audioLanguage?.split('-').first.toLowerCase();
         final expected = expectedAudioLanguage.split('-').first.toLowerCase();
         // "und" (undefined) or "eng" means the tag was lost during stream
@@ -245,9 +251,7 @@ class MediaAssembler {
         }
       }
 
-      if (expectedHeight != null &&
-          height != null &&
-          height > expectedHeight) {
+      if (expectedHeight != null && height != null && height > expectedHeight) {
         // Tolerate slight container differences; only flag when far off.
         if (height > expectedHeight + 8) {
           failures.add(
