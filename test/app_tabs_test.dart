@@ -6,12 +6,15 @@ import 'package:provider/provider.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:universal_downloader/app/app_controller.dart';
 import 'package:universal_downloader/app/theme/app_theme.dart';
+import 'package:universal_downloader/settings/app_settings.dart';
 import 'package:universal_downloader/ui/pages/app_tabs.dart';
 import 'package:universal_downloader/ui/pages/home_page.dart';
 import 'package:universal_downloader/ui/pages/settings_page.dart';
 import 'package:universal_downloader/ui/widgets/app_scaffold.dart';
 import 'package:universal_downloader/ui/widgets/app_tab_scope.dart';
 import 'package:universal_downloader/ui/widgets/download_history_entry.dart';
+import 'package:universal_downloader/ui/widgets/home_video_list.dart';
+import 'package:universal_downloader/ui/widgets/home_video_settings.dart';
 
 import 'home_batch_test.dart' show BatchController, BatchProvider;
 import 'support/persistence_fixtures.dart';
@@ -104,6 +107,60 @@ void main() {
       expect(tester.takeException(), isNull);
     });
   }
+
+  for (final sizes in [(375.0, 1162.0), (1162.0, 375.0)]) {
+    testWidgets(
+      'prepared video survives resizing from ${sizes.$1} to ${sizes.$2}',
+      (tester) async {
+        await mount(tester, sizes.$1);
+        await tester.enterText(
+          find.byType(TextField),
+          'https://first.example/one',
+        );
+        await tester.tap(find.widgetWithText(FilledButton, 'Add videos'));
+        await tester.pumpAndSettle();
+        final home = tester.state(find.byType(HomePage));
+        expect(
+          tester.widget<HomeVideoList>(find.byType(HomeVideoList)).entries,
+          hasLength(1),
+        );
+
+        tester.view.physicalSize = Size(sizes.$2, 900);
+        await tester.pumpAndSettle();
+
+        expect(tester.state(find.byType(HomePage)), same(home));
+        expect(
+          tester.widget<HomeVideoList>(find.byType(HomeVideoList)).entries,
+          hasLength(1),
+        );
+        expect(tester.takeException(), isNull);
+      },
+    );
+  }
+
+  testWidgets('single prepared video survives compact to desktop resize', (
+    tester,
+  ) async {
+    controller.settings = const AppSettings();
+    await mount(tester, 375);
+    await tester.enterText(find.byType(TextField), 'https://first.example/one');
+    await tester.tap(find.widgetWithText(FilledButton, 'Fetch Info'));
+    await tester.pumpAndSettle();
+    final home = tester.state(find.byType(HomePage));
+    final draft = tester
+        .widget<HomeVideoSettings>(find.byType(HomeVideoSettings))
+        .draft;
+
+    tester.view.physicalSize = const Size(1162, 900);
+    await tester.pumpAndSettle();
+
+    expect(tester.state(find.byType(HomePage)), same(home));
+    expect(
+      tester.widget<HomeVideoSettings>(find.byType(HomeVideoSettings)).draft,
+      same(draft),
+    );
+    expect(tester.takeException(), isNull);
+  });
 
   testWidgets('revisiting Settings refreshes saved values', (tester) async {
     await mount(tester, 1162);
